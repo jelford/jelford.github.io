@@ -1,0 +1,3 @@
+[submodule "greasemonkey-scripts"]
+	path = greasemonkey-scripts
+	url = https://github.com/jelford/greasemonkey-scripts.git
