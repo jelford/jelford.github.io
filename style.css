@@ -1,8 +1,6 @@
 body {
     font-family: helvetica,sans;
-    width: 50%;
-    margin-left: auto;
-    margin-right: auto;
+    margin-left: 1em;
 }
 
 .aside {
