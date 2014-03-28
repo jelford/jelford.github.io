@@ -24,10 +24,9 @@ body {
 }
 
 .link-desc {
-    opacity: 0;
+    display: none;
 }
 
 .link-item:hover .link-desc {
-    opacity: 1;
-    transition: opacity .25s ease-in;
+    display: inline;
 }
