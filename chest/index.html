@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>jelford @ github -&gt; spool</title>
+        <link rel="stylesheet" type="text/css" href="style.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js"></script>
+        <script src="https://raw.githubusercontent.com/jelford/spool/master/spool.js"></script>
+    </head>
+    <body>
+        <section name="description">
+        <h1><a href="../index.html">jelford</a> -&gt; chest</h1>
+        <div>
+            <p><span class="codeword">chest</span>, a python web service for charting arbitrary data series over time.</p>
+        </div>
+        </section>
+
+        <section name="installation">
+            <h2>Installation</h2>
+            <code>
+                <pre>
+git clone https://github.com/jelford/chest.git
+pip install chest
+                </pre>
+            </code>
+        </section>
+
+        <section name="usage">
+            <h2>Usage</h2>
+            <p>Start the server:</p>
+            <code>
+                <pre>
+python -m chest.start
+                </pre>
+            </code>
+            <p>Post data:</p>
+            <code>
+                <pre>
+>>> from requests import post
+>>> from json import dumps
+>>> post('http://server_address:5805/series_name', data=dumps({'value': 5}))
+                </pre>
+            </code>
+            <p>Browse to <code>http://server_address:5805/series_name/chart</code> to see the posted data in a chart</p>
+        </section>
+    </body>
+</html> 
