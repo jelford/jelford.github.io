@@ -1,6 +1,6 @@
 #! /usr/bin/env sh
 set -e
 
-rm *.html
+make clean
 make
-git add *.html
+git add **/*.html
