@@ -3,4 +3,8 @@ set -e
 
 make clean
 make
-find . -name '*.html' -exec git add {} \;
+
+for new_html in `git status --porcelain -uno | grep -P '^A' | awk '{print $2;}' | sed -e 's/\.md$/\.html/g'`;
+do
+    git add $new_html
+done
