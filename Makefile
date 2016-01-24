@@ -11,13 +11,11 @@ all : $(tl_objects) blog.html
 $(tl_objects) : $(tl_sources)
 	pandoc --email-obfuscation=javascript --self-contained --css=style.css --standalone $< -f markdown -t html5 -o $@
 
-blog.html : $(blog_objects)
-	echo '<html><head><link rel="stylesheet" type="text/css" href="style.css" ></head><body>' > blog.html
-	cat $(blog_objects) >> blog.html
-	echo '</body></html>' >> blog.html
+blog.html : $(blog_objects) compile_blog
+	./compile_blog blog.html $(blog_objects)
 
 blog/%.html : blog/%.md	
 	pandoc --email-obfuscation=javascript $< -f markdown -t html5 -o $@
 
-clean :
+clean : 
 	find . -name '*.html' -exec rm {} \;

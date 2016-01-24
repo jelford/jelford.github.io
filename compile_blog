@@ -1,0 +1,44 @@
+#! /usr/bin/env python3
+
+import argparse
+import sys
+import subprocess
+from datetime import datetime
+
+
+def parse_args(args):
+	parser = argparse.ArgumentParser(description='Combine blog posts into a single page')
+	parser.add_argument('output_file', type=argparse.FileType('w'))
+	parser.add_argument('input_files', nargs=argparse.REMAINDER)
+
+	args = parser.parse_args(sys.argv[1:])
+	return args.output_file, args.input_files
+
+
+class BlogPost():
+	def __init__(self, file_path):
+		self.file_path = file_path
+
+	def content(self):
+		with open(self.file_path, 'r') as f:
+			return f.read()
+	def timestamp(self):
+		timestamp = subprocess.check_output(['git', 'log', '--diff-filter=A', '--pretty=%aD' , '--', self.file_path]).decode().strip()
+		return datetime.strptime(timestamp, '%a, %d %b %Y %H:%M:%S %z')
+
+
+def compile(output_file, blog_posts):
+	output_file.write('<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="2" ></head><body>')
+
+	for b in reversed(sorted(blog_posts, key=lambda b: b.timestamp())):
+		output_file.write('<section class="blog_post">')
+		output_file.write(b.content())
+		output_file.write('</section>')
+
+	output_file.write('</body></html>')
+
+def compile_files(output_file, input_paths):
+	compile(output_file, (BlogPost(p) for p in input_paths))
+
+if __name__ == '__main__':
+	compile_files(*parse_args(sys.argv[1:]))
