@@ -3,6 +3,7 @@
 ## Online
 
 - [GitHub](https://github.com/jelford)
+- [Blog](/blog.html)
 - [LinkedIn](https://uk.linkedin.com/in/jelford)
 - [StackOverflow](http://stackoverflow.com/users/227224/jelford)
 
