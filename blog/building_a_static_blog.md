@@ -16,6 +16,7 @@ I don't have ruby installed.
 ### Managing the build
 
 All the build needs to do is:
+
 - figure out all the markdown files
 - convert them into HTML
 - compile that list into a single front-page blog.html
@@ -56,17 +57,21 @@ So then we just have to implement the conversion and combining steps.
 
 I'll be using pandoc to convert markdown files to HTML. This couldn't be eaiser:
 
-    $(blog_outputs) : $(blog_sources)
-    	pandoc $< -f markdown -t html5 $@
+    blog/%.html : blog/%.md 
+    	pandoc --email-obfuscation=javascript $< -f markdown -t html5 -o $@
+
+Notice this doesn't use `$(blog_outputs)` or `$(blog_sources)`. I found make was
+desperate to do _all_ the `$(blog_outputs)` at once in the case they were the make
+target (makes sense), so this is a [pattern rule](http://www.gnu.org/software/make/manual/make.html#Pattern-Intro).
 
 ### Combining
 
 Here's the simplest implementation I can think of for creating an easy-to-browse
 front page from all the inputs:
 
-    blog.html : $(blog_outputs)
-    	echo '<html><head></head><body>' > blog.html
-    	for b in $(blog_objects); do cat $$b >> blog.html; done
+    blog.html : $(blog_objects)
+    	echo '<html><head><link rel="stylesheet" type="text/css" href="style.css" ></head><body>' > blog.html
+    	cat $(blog_objects) >> blog.html
     	echo '</body></html>' >> blog.html
 
 That'll just concatenate all the pages together (in any old order) into one long
@@ -75,13 +80,14 @@ thing so we don't all hate ourselves every time we load the page: adding a style
 sheet:
 
     blog.html : $(blog_outputs)
-    	echo '<html><head><link rel="stylesheet" type="text/css" href="style.css"></head><body>' > blog.html
-    	for b in $(blog_objects); do cat $$b >> blog.html; done
+    	echo '<html><head><link rel="stylesheet" type="text/css" href="style.css" ></head><body>' > blog.html
+    	cat $(blog_objects) >> blog.html
     	echo '</body></html>' >> blog.html
 
 
 Over the course of the next few blog posts, I'll about adding nicities on top of this starting
 point:
+
 - moving the combination step out of make into a script
 - ordering the posts by some sort of date
 - making the page load dynamically, so you don't just get everything on there
