@@ -1,0 +1,39 @@
+<h2 id="building-a-static-blog-with-markdown-make-and-python">Building a static blog with Markdown, Make, and Python</h2>
+<h3 id="background">Background</h3>
+<p>I wanted to build a simple way to publish blog posts. I'm happy without any server-side gubbins; all I want it a simple place to put some static content, so github-pages is fine.</p>
+<p>The other must for me is to be able to use markdown to write in. I've tried just doing raw HTML in the past, and frankly it doesn't fill me with joy.</p>
+<p>Github has a tool built in, which you can install locally and test out - <a href="https://help.github.com/articles/using-jekyll-with-pages/">Jekyll</a> - but I wanted to use pandoc for compiling my markdown to HTML, and besides I don't have ruby installed.</p>
+<h3 id="managing-the-build">Managing the build</h3>
+<p>All the build needs to do is: - figure out all the markdown files - convert them into HTML - compile that list into a single front-page blog.html</p>
+<p>Sounds like a job for make. Besides, that gives me a chance to brush up on Makefiles.</p>
+<p>The rest of ths post goes through each of those steps, one by one. For reference, this whole site is checked in as a github page; you can easily check out the source for yourself <a href="https://github.com/jelford/jelford.github.io">here</a>.</p>
+<h3 id="gathering-the-markdown-files">Gathering the markdown files</h3>
+<p>Make has built-in macros for grouping together a series of files from one place into a build target:</p>
+<pre><code>blog_sources := $(wildcard blog/*.md)
+blog_outputs := $(patsubst %.md,%.html,$(blog_sources))</code></pre>
+<p>Those will translate to something like:</p>
+<pre><code>blog_sources := page_1.md this_blogpost.md that_blogpost.md
+blog_outputs := page_1.html this_blogpost.html that_blogpost.html</code></pre>
+<p>Using these macros, we can define a set of make rules to compile the blog pages, and then generate a single front-page that combines them together for easy browsing:</p>
+<pre><code>blog.html : $(blog_outputs)
+    combine_pages $(blog_outputs)
+
+$(blog_outputs) : $(blog_sources)
+    convert_to_html $&lt; $@</code></pre>
+<p>So then we just have to implement the conversion and combining steps.</p>
+<h3 id="converting-to-html">Converting to HTML</h3>
+<p>I'll be using pandoc to convert markdown files to HTML. This couldn't be eaiser:</p>
+<pre><code>$(blog_outputs) : $(blog_sources)
+    pandoc $&lt; -f markdown -t html5 $@</code></pre>
+<h3 id="combining">Combining</h3>
+<p>Here's the simplest implementation I can think of for creating an easy-to-browse front page from all the inputs:</p>
+<pre><code>blog.html : $(blog_outputs)
+    echo &#39;&lt;html&gt;&lt;head&gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
+    for b in $(blog_objects); do cat $$b &gt;&gt; blog.html; done
+    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+<p>That'll just concatenate all the pages together (in any old order) into one long page with all the content. Pretty spartan, but it does the job. Just one more thing so we don't all hate ourselves every time we load the page: adding a style sheet:</p>
+<pre><code>blog.html : $(blog_outputs)
+    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot;&gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
+    for b in $(blog_objects); do cat $$b &gt;&gt; blog.html; done
+    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+<p>Over the course of the next few blog posts, I'll about adding nicities on top of this starting point: - moving the combination step out of make into a script - ordering the posts by some sort of date - making the page load dynamically, so you don't just get everything on there as a one-er each time</p>
