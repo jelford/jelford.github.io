@@ -1,10 +1,21 @@
 #! /usr/bin/env sh
 set -e
 
-make clean
-make
+declare -a staged
+staged=$(git status --porcelain | grep -P '^\S' | awk '{ print $2; }')
 
-for new_html in `git status --porcelain -uno | grep -P '^A' | awk '{print $2;}' | sed -e 's/\.md$/\.html/g'`;
+echo -n "Ensuring clean build..."
+make clean > /dev/null
+make > /dev/null
+
+for previously_staged_file in $staged;
 do
-    git add $new_html
+    echo "re-adding $previously_staged_file"
+    git add $previously_staged_file
+done
+
+for new_html_file in $(git status --porcelain -uno | grep -P '^A' | awk '{print $2;}' | sed -e 's/\.md$/\.html/g');
+do
+    echo "Adding new generated file: $new_html_file"
+    git add $new_html_file #> /dev/null 2>&1
 done
