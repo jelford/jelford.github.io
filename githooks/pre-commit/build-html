@@ -14,8 +14,10 @@ do
     git add $previously_staged_file
 done
 
+echo -n " Scanning for generated files..."
 for new_html_file in $(git status --porcelain -uno | grep -P '^A' | awk '{print $2;}' | sed -e 's/\.md$/\.html/g');
 do
-    echo "Adding new generated file: $new_html_file"
+    echo "$new_html_file"
     git add $new_html_file #> /dev/null 2>&1
 done
+echo " Done"
