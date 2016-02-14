@@ -159,17 +159,21 @@ if __name__ == '__main__':
 
 Now we've got a model, we can sort the blog posts by the details - in this
 case, I want the time the file was create (or, added to git, as a reasonable
-proxy).
+proxy, since I want it to survive renamed, checkouts elsewhere, that sort
+of thing).
 
 ~~~
 import subprocess
 import datetime
+import timezone
+
 
 class BlogPost():
 	...
 	def timestamp(self):
 		timestamp = subprocess.check_output(['git', 'log', '--diff-filter=A', '--pretty=%aD' , '--', self.file_path]).decode().strip()
-		return datetime.strptime(timestamp, '%a, %d %b %Y %H:%M:%S %z')
+		return datetime.strptime(timestamp, '%a, %d %b %Y %H:%M:%S %z') if timestamp \
+			else datetime.now(tz=timezone.utc) # if the file's not yet in git
 
 ...
 

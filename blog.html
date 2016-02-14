@@ -95,15 +95,18 @@ def compile_files(output_file, input_paths):
 
 if __name__ == &#39;__main__&#39;:
     compile_files(*parse_args(sys.argv[1:]))</code></pre>
-<p>Now we've got a model, we can sort the blog posts by the details - in this case, I want the time the file was create (or, added to git, as a reasonable proxy).</p>
+<p>Now we've got a model, we can sort the blog posts by the details - in this case, I want the time the file was create (or, added to git, as a reasonable proxy, since I want it to survive renamed, checkouts elsewhere, that sort of thing).</p>
 <pre><code>import subprocess
 import datetime
+import timezone
+
 
 class BlogPost():
     ...
     def timestamp(self):
         timestamp = subprocess.check_output([&#39;git&#39;, &#39;log&#39;, &#39;--diff-filter=A&#39;, &#39;--pretty=%aD&#39; , &#39;--&#39;, self.file_path]).decode().strip()
-        return datetime.strptime(timestamp, &#39;%a, %d %b %Y %H:%M:%S %z&#39;)
+        return datetime.strptime(timestamp, &#39;%a, %d %b %Y %H:%M:%S %z&#39;) if timestamp \
+            else datetime.now(tz=timezone.utc) # if the file&#39;s not yet in git
 
 ...
 

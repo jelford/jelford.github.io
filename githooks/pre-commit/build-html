@@ -2,7 +2,7 @@
 set -e
 
 declare -a staged
-staged=$(git status --porcelain | grep -P '^\S' | awk '{ print $2; }')
+staged=$(git status --porcelain | grep -P '^[^\s\?]' | awk '{ print $2; }')
 
 echo -n "Ensuring clean build..."
 make clean > /dev/null
