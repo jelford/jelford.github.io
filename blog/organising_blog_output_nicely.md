@@ -1,5 +1,4 @@
-
-## Building a better blog: organising output
+% Building a better blog: organising output
 
 In the last entry, I walked through using a simple make-file to generate the
 HTML for a simple blog - it will convert a collection of markdown files into
@@ -12,9 +11,9 @@ way:
 - we'll style the resulting page to make it easier to see where one entry stops
 and the next one starts
 
-### Faster feedback
+## Faster feedback
 
-#### See it in a browser
+### See it in a browser
 
 First, let's get ourselves set up with a fast feedback loop. We'd like to see
 fully-rendered output, as it'll look to readers, in a browser, immediately as
@@ -37,7 +36,7 @@ world if we don't have to. If you're using an older version of python you can do
 
     python2 -m SimpleHTTPServer
 
-#### Make all the time
+### Make all the time
 
 If we were building a JavaScript app, we'd probably have set up a file watch
 by now. We should do that here:
@@ -48,7 +47,7 @@ That'll run `make` every couple of seconds. It's not as event-driven as we might
 be used to from `inotify`-type file watching, but it'll do us. Now, every time
 we save a file, we should see the update in our browsers as soon as we refresh.
 
-#### See it straight away
+### See it straight away
 
 One last thing: while we're working on things, let's just have our browser
 auto-refresh the page.
@@ -76,7 +75,7 @@ so it won't put as much extra load on the network/server as you might expect.
 
 Which is kind of nice...
 
-### Move our compilation into a script
+## Move our compilation into a script
 
 I don't like writing raw bash (or makefiles, for that matter) any more than the
 next person. Let's move our bash step into a separate script:
@@ -126,7 +125,7 @@ changes to its build script:
     blog.html : $(blog_objects) compile_blog
     	...
 
-### Ordering our blog posts
+## Ordering our blog posts
 
 Now we're in proper programming land, we can start to be more sophisticated
 with how we work with our files.

@@ -1,48 +1,213 @@
-<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="2" ></head><body><section class="blog_post"><h2 id="building-a-better-blog-organising-output">Building a better blog: organising output</h2>
-<p>In the last entry, I walked through using a simple make-file to generate the HTML for a simple blog - it will convert a collection of markdown files into HTML snippets, then concatenate them into a single &quot;blog&quot; page.</p>
+<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="30" ><meta name="viewport" content="width=device-width, initial-scale=1" ></head><body><header><h1>jelford's blog</h1><nav><ul><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li></ul></nav></header><article class="blog_post">
+<h1 class="title">Bringing things together as a blog</h1>
+<a class="permalink" href="/blog/styling_the_front_page.html">permalink</a>
+<p>So far we've taken a simple approach to gluing everyting together, but it'd be good to have a couple of the niceties that make things seem like more than just... a wall of text on a page.</p>
+<p>I can think of a couple of nice features that would make things look better:</p>
+<ul>
+<li>Whole-page styling, e.g. link back to homepage</li>
+<li>Permalinks for individual posts</li>
+<li>Meta information on the posts (e.g. published date)</li>
+</ul>
+<p>I still want to actually <em>write</em> all the posts in simple markdown, but to get e.g. permalinks, we're going to need the blog posts to make sense as standalone HTML pages, and then when we bring them together in the front page, we'll need to strip out just the content. First thing: we'll have pandoc translate individual blog entries into standalone HTML pages</p>
+<pre><code>blog/%.html : blog/%.md 
+    pandoc --email-obfuscation=javascript --self-contained --css=style.css --standalone $&lt; -f markdown -t html5 -o $@</code></pre>
+<p>The <code>--standalone</code> argument instructs pandoc to make a full HTML file (complete with headers, meta, and so on), while the <code>--self-contained</code> flag instructs it to inline all the CSS. We don't necessarily want that in there permanently, but if you try to build without it, pandoc with get the path wrong (<code>style.css</code> sits in the root, but pandoc has no way to know that the output document will be within a folder; it uses the relative path from the current working directory).</p>
+<p>That's enough to get us a reasonable output if we browse to the individual blog posts by name, but there are a few things left:</p>
+<ul>
+<li>There's no way to browse to the individual blog posts; we still don't have any kind of permalink to them.</li>
+<li><code>compile_blog</code> is still sucking in the entire content of the blog posts into the front page. Whilst modern browsers can figure out what's sensible, it means we're left with duplicate <code>&lt;head&gt;</code> blocks, css getting included several times, and so on.</li>
+</ul>
+<p>Let's address the first point first - it should be easy enough to add a link in the body of every blog post to its own path.</p>
+<h2 id="adding-permalinks">Adding Permalinks</h2>
+<p>So far, we've just been using pandoc's default HTML template, plus a very simple stylesheet. The default HTML template has some useful bits in it; it gives us a <code>&lt;head&gt;</code> section with some reasonable <code>&lt;meta&gt;</code> tags, and if we take the time to inspect it, we'll see there's also some sort of shim to make things nicer for users with an older version of internet explorer.</p>
+<p>It's time to replace it with our own template, which will be even simpler:</p>
+<ul>
+<li>We won't bother with the <code>&lt;meta&gt;</code> tags for now - maybe we'll come back later when we explicitly want them as a feature, and think about how we might want them populated</li>
+<li>We won't bother with an HTML5 shim anymore; internet explorer's on version 11 now, so hopefully there aren't too many people out there still on version 8.</li>
+</ul>
+<p>We do at least still want CSS to be passed in, so we'll make our new template with reference to the default. You can see that by running:</p>
+<pre><code>pandoc -D html</code></pre>
+<p>There's some stuff in there we might want about authors, and it looks like it'll try to generate some headers, title, and so on for us. That's all very nice, but to begin with let's keep things super-simple and strip it right down:</p>
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+        &lt;meta charset="utf-8" /&gt;
+$for(css)$
+        &lt;link rel="stylesheet" href="$css$" type="text/css" /&gt;
+$endfor$
+&lt;/head&gt;
+&lt;body&gt;
+&lt;article&gt;
+$body$
+&lt;/article&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>What've we got here?</p>
+<ul>
+<li>A simple HTML 5 doctype (a simple "<code>html</code>" is all we need)</li>
+<li>Any CSS specified on the commandline will get added in.</li>
+<li>It's wrapped in an <code>&lt;article&gt;</code> tag because it's an (article)[https://www.w3.org/TR/html5/sections.html#the-article-element]. It's good to remember that our markup has semantic value.</li>
+</ul>
+<p>Now we've got a working standalone page that we can add to, let's get to adding in our permalinks. We'll modify the body section of our template to include a link to its "canonical" location:</p>
+<pre><code>&lt;body&gt;
+&lt;div&gt;&lt;a href="$permalink$"&gt;permalink&lt;/a&gt;&lt;/div&gt;
+$body$
+&lt;/body&gt;</code></pre>
+<p>If let's put our new template in a file somewhere, and tell pandoc to use that instead of the default. The template file:</p>
+<pre><code>cat &gt; blog/pandoc_html_template.html.template &lt;&lt; EOF
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="utf-8" /&gt;
+    &lt;meta name="generator" content="pandoc" /&gt;
+$for(css)$
+    &lt;link rel="stylesheet" href="$css$" type="text/css" /&gt;
+$endfor$
+&lt;/head&gt;
+&lt;body&gt;
+&lt;article&gt;
+&lt;div&gt;&lt;a href="$permalink$"&gt;permalink&lt;/a&gt;&lt;/div&gt;
+$body$
+&lt;/article&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+EOF</code></pre>
+<p>And then we update our Makefile:</p>
+<pre><code>blog/%.html : blog/%.md pandoc_html_template.html.template
+    pandoc --email-obfuscation=javascript --self-contained --css=style.css --standalone --template=blog/pandoc_html_template.html.template $&lt; -f markdown -t html5 -o $@</code></pre>
+<p>Notice we also added the template to the list of dependencies for each blog entry's HTML output. This ensures that when we change the template, our make script will pick up the changes and know that it needs to regenerate <em>every</em> blog post.</p>
+<p>Let's give it a whirl, and see what we get:</p>
+<div style="border: 1px solid grey">
+<a href="">permalink</a>
+<h1>
+Bringing things together as a blog
+</h1>
+<div>
+...
+</div>
+</div>
+<p>Ah, that doesn't look to good - the link sitting above the title. Darn. Looks like we might want to do something better with how we work with titles, so we can put content below them in our templates. Taking another look at pandoc's default template, it incldes the following lines:</p>
+<pre><code>$if(title)$
+&lt;div id="$idprefix$header"&gt;
+&lt;h1 class="title"&gt;$title$&lt;/h1&gt;
+...</code></pre>
+<p>The "title" in the case comes from metadata at the top of the file, which pandoc reads in, and then makes available in the template rendering context. You can get the details on what kinds of things we might want to put in meta- data blocks from the pandoc <a href="http://pandoc.org/README.html#metadata-blocks">documentation</a>. We're interested in the <code>% title</code> element. So far, I've been putting an H element at the top of every blog post, by just writing:</p>
+<pre><code>% Bringing things together as a blog
+...</code></pre>
+<p>Maybe it's time to <em>tell pandoc</em> what the title of the post is, and then let it figure out how to render the titles. So, as part of adding this feature, I've gone through and replaced all the headers with metadata blogs; the lines above become:</p>
+<pre><code>% Brining things together as a blog</code></pre>
+<p>and our template body changes to:</p>
+<pre><code>&lt;body&gt;
+&lt;article&gt;
+&lt;h1 class="title"&gt;$title$&lt;/h1&gt;
+&lt;a href=""&gt;permalink&lt;/a&gt;
+$body$
+&lt;/article&gt;
+&lt;/body&gt;</code></pre>
+<p>I'm not going to go though manually changing the first line of every blog post; I'll just run:</p>
+<pre><code>find blog -name '*.md' -exec sed -e 's/^# /% /g' {} \;</code></pre>
+<p>to get all the <code>&lt;h1&gt;</code> elements.</p>
+<p>Finally, we're still missing a crucial detail - all our permalinks are missing their <code>href</code> attributes (or rather, they're all blank). We need to pass in the relative file path to the template when we generate the page. That's one last tweak to our Makefile:</p>
+<pre><code>pandoc --email-obfuscation=javascript --self-contained --css=style.css --standalone --template=blog/pandoc_html_template.html.template -V permalink=/$@ $&lt; -f markdown -t html5 -o $@</code></pre>
+<p>Hey presto - we get html that looks like this:</p>
+<pre><code>&lt;body&gt;
+&lt;article&gt;
+&lt;h1&gt;...&lt;/h1&gt;
+&lt;a class="permalink" href="blog/styling_the_front_page.html"&gt;permalink&lt;/a&gt;
+&lt;p&gt; ...
+&lt;/article&gt;</code></pre>
+<h2 id="tidying-up-the-main-page">Tidying up the main page</h2>
+<p>Now that we've made the changes we needed to add permalinks, it's time we clear up the main page. Let's stop the <code>compile_blog</code> step from pulling in extraneous HTML from the sub pages, for a start. The approach I'm going to take is to parse sub-pages and extract just their <code>body</code> elements. It's easy to do with the very adequate <a href="http://www.crummy.com/software/BeautifulSoup/">Beautiful Soup</a> library. This is the first piece of third-party software I'm using so far for this project - I'll start a local <a href="http://virtualenv.readthedocs.org/en/latest/">virtualenv</a> to keep my external dependencies tidily separated from the rest of my system:</p>
+<pre><code>sudo pip install --upgrade pip setuptools virtualenv wheel # update everything
+virtualenv . --python=python3
+. bin/activate
+pip install --upgrade beautifulsoup4</code></pre>
+<p>I'll also add some entries to <code>.gitignore</code> to make that not be a huge pain. Helpfully, there's a github project that collects together commonly used <code>.gitignore</code> snippets <a href="https://github.com/github/gitignore">here</a>, or if you prefer to have someone do your text-file-gluing-togther for you, there's a neat wrapper around there <a href="https://www.gitignore.io/">here</a>.</p>
+<p>One more thing - I'll want to check in a list of dependencies:</p>
+<pre><code>pip freeze &gt; requirements.txt
+git add requirements.txt</code></pre>
+<p>Now we'll need to do</p>
+<pre><code>. bin/activate</code></pre>
+<p>whenever we start working on the blog, to set up our working environment correctly.</p>
+<p>Right, back to the business of sorting out the front page. We'll modify <code>compile_blog</code> to extract just the <code>&lt;article&gt;</code> section of our sub-pages:</p>
+<pre><code>class BlogPost():
+    ...
+    def content(self):
+        with open(self.file_path, 'r') as f:
+            soup = BeautifulSoup(f.read())
+        return soup.body.article
+</code></pre>
+<p><code>BlogPost.content()</code> now returns a beautifulsoup HTML element - let's update the compile step to be aware of that, and apply any top-level styling:</p>
+<pre><code>def compile(...):
+    ...
+    for b in reversed(sorted(blog_posts, key=lambda b: b.timestamp())):
+        post = b.content()
+        post['class'] = 'blog_post' # add styling that applies at the top level
+        output_file.write(str(post))</code></pre>
+<h2 id="styling-the-main-page">Styling the main page</h2>
+<p>So we're finally in a place where the main page has some reasonable markup on it, embedding individual blog posts, that can be linked to as standalone pages. Nice going. Finally, let's add some simple styling that links back to the site's main page, with some borders, and then let's call it a day. We'll come back and add in date information to individual posts next time maybe.</p>
+<p>First, I'm just going to add a header to the top of every page. We'll modify the front page as follows:</p>
+<pre><code>def compile(output_file, blog_posts):
+    ...
+    output_file.write('&lt;header&gt;&lt;h1&gt;jelford\'s blog&lt;/h1&gt;&lt;nav&gt;&lt;ul&gt;&lt;li&gt;&lt;a href="/"&gt;home&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href="https://github.com/jelford"&gt;github&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;&lt;/nav&gt;&lt;/header&gt;')</code></pre>
+<p>That gives us the main links we'll want at the top, along with an originally named header. One last thing - add the CSS to get the links to flow horizontally:</p>
+<pre><code>nav ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+
+nav ul li {
+    display: inline;
+    margin-right: 0.3em;
+}</code></pre>
+</article><article class="blog_post">
+<h1 class="title">Building a better blog: organising output</h1>
+<a class="permalink" href="/blog/organising_blog_output_nicely.html">permalink</a>
+<p>In the last entry, I walked through using a simple make-file to generate the HTML for a simple blog - it will convert a collection of markdown files into HTML snippets, then concatenate them into a single "blog" page.</p>
 <p>In this entry, we'll build on that by managing multiple entries more in a nicer way:</p>
 <ul>
 <li>we'll make it put them into some sort of order (based on when they were written)</li>
 <li>we'll style the resulting page to make it easier to see where one entry stops and the next one starts</li>
 </ul>
-<h3 id="faster-feedback">Faster feedback</h3>
-<h4 id="see-it-in-a-browser">See it in a browser</h4>
+<h2 id="faster-feedback">Faster feedback</h2>
+<h3 id="see-it-in-a-browser">See it in a browser</h3>
 <p>First, let's get ourselves set up with a fast feedback loop. We'd like to see fully-rendered output, as it'll look to readers, in a browser, immediately as we make updates.</p>
 <p>We can open up out rendered output in a web browser easily enough:</p>
 <pre><code>firefox ./blog.html</code></pre>
-<p>... but most browsers will behave a little differently when we view <code>file:///</code> URLs compared to if they were on the web. We can get the &quot;real thing&quot; without much extra hassle though:</p>
+<p>... but most browsers will behave a little differently when we view <code>file:///</code> URLs compared to if they were on the web. We can get the "real thing" without much extra hassle though:</p>
 <pre><code>python3 -m http.server --bind 127.0.0.1</code></pre>
 <p>will run a simple http server that serves up the current working directory. The <code>--bind</code> on the end instructs it to only listen for connections from <code>localhost</code> - it's not much, but it's probably best not to open up a socket to the whole world if we don't have to. If you're using an older version of python you can do:</p>
 <pre><code>python2 -m SimpleHTTPServer</code></pre>
-<h4 id="make-all-the-time">Make all the time</h4>
+<h3 id="make-all-the-time">Make all the time</h3>
 <p>If we were building a JavaScript app, we'd probably have set up a file watch by now. We should do that here:</p>
 <pre><code>watch make</code></pre>
 <p>That'll run <code>make</code> every couple of seconds. It's not as event-driven as we might be used to from <code>inotify</code>-type file watching, but it'll do us. Now, every time we save a file, we should see the update in our browsers as soon as we refresh.</p>
-<h4 id="see-it-straight-away">See it straight away</h4>
+<h3 id="see-it-straight-away">See it straight away</h3>
 <p>One last thing: while we're working on things, let's just have our browser auto-refresh the page.</p>
 <p>We'll put this in the <code>&lt;head&gt;</code> of our HTML:</p>
-<pre><code>&lt;meta http-equiv=&quot;refresh&quot; content=&quot;5&quot; &gt;</code></pre>
+<pre><code>&lt;meta http-equiv="refresh" content="5" &gt;</code></pre>
 <p>So our final make step now looks like this:</p>
 <pre><code>blog.html : $(blog_objects) 
-    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html 
+    echo '&lt;html&gt;&lt;head&gt;&lt;link rel="stylesheet" type="text/css" href="style.css" &gt;&lt;meta http-equiv="refresh" content="2" &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html 
     cat $(blog_objects) &gt;&gt; blog.html 
-    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
 <p>Now, nobody like pages that auto-refresh while they're looking at them, so I'd like to take this out before pushing anything up, but there are a couple of things that mean it wouldn't be <em>the worst thing ever</em> if we forget:</p>
 <ul>
 <li>It looks like (Firefox at least) it nice enough to maintain your postion on the page between refreshes</li>
 <li>Because we're generating a static page (that github's going to server statically), every request should actually hit the cache (unless there's been a real change), so it won't put as much extra load on the network/server as you might expect.</li>
 </ul>
 <p>Which is kind of nice...</p>
-<h3 id="move-our-compilation-into-a-script">Move our compilation into a script</h3>
+<h2 id="move-our-compilation-into-a-script">Move our compilation into a script</h2>
 <p>I don't like writing raw bash (or makefiles, for that matter) any more than the next person. Let's move our bash step into a separate script:</p>
 <pre><code>blog.html : $(blog_objects)
     ./compile_blog $(blog_objects)
 
 --- ./compile_blog ---
 #! /usr/bin/env sh
-echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html 
+echo '&lt;html&gt;&lt;head&gt;&lt;link rel="stylesheet" type="text/css" href="style.css" &gt;&lt;meta http-equiv="refresh" content="2" &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html 
 cat $@ &gt;&gt; blog.html 
-echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
 <p>Phew. That's better. Okay, now let's move to using a nicer language than <code>sh</code> for manipulating files. We'll use python, since that's what I like.</p>
 <pre><code>#! /usr/bin/env python3
 
@@ -50,28 +215,28 @@ import argparse
 import sys
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description=&#39;Combine blog posts into a single page&#39;)
-    parser.add_argument(&#39;output_file&#39;, type=argparse.FileType(&#39;w&#39;))
-    parser.add_argument(&#39;input_files&#39;, nargs=argparse.REMAINDER)
+    parser = argparse.ArgumentParser(description='Combine blog posts into a single page')
+    parser.add_argument('output_file', type=argparse.FileType('w'))
+    parser.add_argument('input_files', nargs=argparse.REMAINDER)
 
     args = parser.parse_args(sys.argv[1:])
     return args.output_file, args.input_files
 
 
-if __name__ == &#39;__main__&#39;:
+if __name__ == '__main__':
     output_file, input_files = parse_args(sys.argv[1:])
         
-    output_file.write(&#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39;)
+    output_file.write('&lt;html&gt;&lt;head&gt;&lt;link rel="stylesheet" type="text/css" href="style.css" &gt;&lt;meta http-equiv="refresh" content="2" &gt;&lt;/head&gt;&lt;body&gt;')
 
     for entry_path in input_files:
-        with open(entry_path, &#39;r&#39;) as blog_entry:
+        with open(entry_path, 'r') as blog_entry:
             output_file.write(blog_entry.read())
 
-    output_file.write(&#39;&lt;/body&gt;&lt;/html&gt;&#39;)</code></pre>
+    output_file.write('&lt;/body&gt;&lt;/html&gt;')</code></pre>
 <p>Finally, let's make it so that our main page re-compiles any time we make changes to its build script:</p>
 <pre><code>blog.html : $(blog_objects) compile_blog
     ...</code></pre>
-<h3 id="ordering-our-blog-posts">Ordering our blog posts</h3>
+<h2 id="ordering-our-blog-posts">Ordering our blog posts</h2>
 <p>Now we're in proper programming land, we can start to be more sophisticated with how we work with our files.</p>
 <p>Let's start by moving them into some sort of very basic domain model:</p>
 <pre><code>class BlogPost():
@@ -79,21 +244,21 @@ if __name__ == &#39;__main__&#39;:
         self.file_path = file_path
 
     def content(self):
-        with open(self.file_path, &#39;r&#39;) as f:
+        with open(self.file_path, 'r') as f:
             return f.read()
 
 def compile(output_file, blog_posts):
-    output_file.write(&#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39;)
+    output_file.write('&lt;html&gt;&lt;head&gt;&lt;link rel="stylesheet" type="text/css" href="style.css" &gt;&lt;meta http-equiv="refresh" content="2" &gt;&lt;/head&gt;&lt;body&gt;')
 
     for b in blog_posts:
         output_file.write(b.content())
 
-    output_file.write(&#39;&lt;/body&gt;&lt;/html&gt;&#39;)
+    output_file.write('&lt;/body&gt;&lt;/html&gt;')
 
 def compile_files(output_file, input_paths):
     compile(output_file, (BlogPost(p) for p in input_paths))
 
-if __name__ == &#39;__main__&#39;:
+if __name__ == '__main__':
     compile_files(*parse_args(sys.argv[1:]))</code></pre>
 <p>Now we've got a model, we can sort the blog posts by the details - in this case, I want the time the file was create (or, added to git, as a reasonable proxy, since I want it to survive renamed, checkouts elsewhere, that sort of thing).</p>
 <pre><code>import subprocess
@@ -104,9 +269,9 @@ import timezone
 class BlogPost():
     ...
     def timestamp(self):
-        timestamp = subprocess.check_output([&#39;git&#39;, &#39;log&#39;, &#39;--diff-filter=A&#39;, &#39;--pretty=%aD&#39; , &#39;--&#39;, self.file_path]).decode().strip()
-        return datetime.strptime(timestamp, &#39;%a, %d %b %Y %H:%M:%S %z&#39;) if timestamp \
-            else datetime.now(tz=timezone.utc) # if the file&#39;s not yet in git
+        timestamp = subprocess.check_output(['git', 'log', '--diff-filter=A', '--pretty=%aD' , '--', self.file_path]).decode().strip()
+        return datetime.strptime(timestamp, '%a, %d %b %Y %H:%M:%S %z') if timestamp \
+            else datetime.now(tz=timezone.utc) # if the file's not yet in git
 
 ...
 
@@ -118,19 +283,21 @@ def compile(...):
 <pre><code>def compile(...):
     ...
     for b in ...
-        output_file.write(&#39;&lt;section class=&quot;blog_post&quot;&gt;&#39;)
+        output_file.write('&lt;section class="blog_post"&gt;')
         output_file.write(b.content())
-        output_file.write(&#39;&lt;/section&gt;&#39;)</code></pre>
+        output_file.write('&lt;/section&gt;')</code></pre>
 <p>And we'll put something in <code>style.css</code> to make that visible:</p>
 <pre><code>section.blog_post {
     border-top: 1px solid grey;
 }</code></pre>
-</section><section class="blog_post"><h2 id="building-a-static-blog-with-markdown-make-and-python">Building a static blog with Markdown, Make, and Python</h2>
-<h3 id="background">Background</h3>
+</article><article class="blog_post">
+<h1 class="title">Building a static blog with Markdown, Make, and Python</h1>
+<a class="permalink" href="/blog/building_a_static_blog.html">permalink</a>
+<h2 id="background">Background</h2>
 <p>I wanted to build a simple way to publish blog posts. I'm happy without any server-side gubbins; all I want it a simple place to put some static content, so github-pages is fine.</p>
 <p>The other must for me is to be able to use markdown to write in. I've tried just doing raw HTML in the past, and frankly it doesn't fill me with joy.</p>
 <p>Github has a tool built in, which you can install locally and test out - <a href="https://help.github.com/articles/using-jekyll-with-pages/">Jekyll</a> - but I wanted to use pandoc for compiling my markdown to HTML, and besides I don't have ruby installed.</p>
-<h3 id="managing-the-build">Managing the build</h3>
+<h2 id="managing-the-build">Managing the build</h2>
 <p>All the build needs to do is:</p>
 <ul>
 <li>figure out all the markdown files</li>
@@ -139,7 +306,7 @@ def compile(...):
 </ul>
 <p>Sounds like a job for make. Besides, that gives me a chance to brush up on Makefiles.</p>
 <p>The rest of ths post goes through each of those steps, one by one. For reference, this whole site is checked in as a github page; you can easily check out the source for yourself <a href="https://github.com/jelford/jelford.github.io">here</a>.</p>
-<h3 id="gathering-the-markdown-files">Gathering the markdown files</h3>
+<h2 id="gathering-the-markdown-files">Gathering the markdown files</h2>
 <p>Make has built-in macros for grouping together a series of files from one place into a build target:</p>
 <pre><code>blog_sources := $(wildcard blog/*.md)
 blog_outputs := $(patsubst %.md,%.html,$(blog_sources))</code></pre>
@@ -153,26 +320,26 @@ blog_outputs := page_1.html this_blogpost.html that_blogpost.html</code></pre>
 $(blog_outputs) : $(blog_sources)
     convert_to_html $&lt; $@</code></pre>
 <p>So then we just have to implement the conversion and combining steps.</p>
-<h3 id="converting-to-html">Converting to HTML</h3>
+<h2 id="converting-to-html">Converting to HTML</h2>
 <p>I'll be using pandoc to convert markdown files to HTML. This couldn't be eaiser:</p>
 <pre><code>blog/%.html : blog/%.md 
     pandoc --email-obfuscation=javascript $&lt; -f markdown -t html5 -o $@</code></pre>
 <p>Notice this doesn't use <code>$(blog_outputs)</code> or <code>$(blog_sources)</code>. I found make was desperate to do <em>all</em> the <code>$(blog_outputs)</code> at once in the case they were the make target (makes sense), so this is a <a href="http://www.gnu.org/software/make/manual/make.html#Pattern-Intro">pattern rule</a>.</p>
-<h3 id="combining">Combining</h3>
+<h2 id="combining">Combining</h2>
 <p>Here's the simplest implementation I can think of for creating an easy-to-browse front page from all the inputs:</p>
 <pre><code>blog.html : $(blog_objects)
-    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
+    echo '&lt;html&gt;&lt;head&gt;&lt;link rel="stylesheet" type="text/css" href="style.css" &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html
     cat $(blog_objects) &gt;&gt; blog.html
-    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
 <p>That'll just concatenate all the pages together (in any old order) into one long page with all the content. Pretty spartan, but it does the job. Just one more thing so we don't all hate ourselves every time we load the page: adding a style sheet:</p>
 <pre><code>blog.html : $(blog_outputs)
-    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
+    echo '&lt;html&gt;&lt;head&gt;&lt;link rel="stylesheet" type="text/css" href="style.css" &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html
     cat $(blog_objects) &gt;&gt; blog.html
-    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
 <p>Over the course of the next few blog posts, I'll about adding nicities on top of this starting point:</p>
 <ul>
 <li>moving the combination step out of make into a script</li>
 <li>ordering the posts by some sort of date</li>
 <li>making the page load dynamically, so you don't just get everything on there as a one-er each time</li>
 </ul>
-</section></body></html>
+</article></body></html>

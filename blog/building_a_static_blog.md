@@ -1,6 +1,6 @@
-## Building a static blog with Markdown, Make, and Python
+% Building a static blog with Markdown, Make, and Python
 
-### Background
+## Background
 
 I wanted to build a simple way to publish blog posts. I'm happy without any
 server-side gubbins; all I want it a simple place to put some static content,
@@ -13,7 +13,7 @@ Github has a tool built in, which you can install locally and test out - [Jekyll
 - but I wanted to use pandoc for compiling my markdown to HTML, and besides
 I don't have ruby installed.
 
-### Managing the build
+## Managing the build
 
 All the build needs to do is:
 
@@ -28,7 +28,7 @@ The rest of ths post goes through each of those steps, one by one. For reference
 this whole site is checked in as a github page; you can easily check out the source
 for yourself [here](https://github.com/jelford/jelford.github.io).
 
-### Gathering the markdown files
+## Gathering the markdown files
 
 Make has built-in macros for grouping together a series of files from one place
 into a build target:
@@ -53,7 +53,7 @@ browsing:
 
 So then we just have to implement the conversion and combining steps.
 
-### Converting to HTML
+## Converting to HTML
 
 I'll be using pandoc to convert markdown files to HTML. This couldn't be eaiser:
 
@@ -64,7 +64,7 @@ Notice this doesn't use `$(blog_outputs)` or `$(blog_sources)`. I found make was
 desperate to do _all_ the `$(blog_outputs)` at once in the case they were the make
 target (makes sense), so this is a [pattern rule](http://www.gnu.org/software/make/manual/make.html#Pattern-Intro).
 
-### Combining
+## Combining
 
 Here's the simplest implementation I can think of for creating an easy-to-browse
 front page from all the inputs:

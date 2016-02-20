@@ -5,6 +5,8 @@ import sys
 import subprocess
 from datetime import datetime, timezone
 
+from bs4 import BeautifulSoup
+
 
 def parse_args(args):
 	parser = argparse.ArgumentParser(description='Combine blog posts into a single page')
@@ -21,19 +23,22 @@ class BlogPost():
 
 	def content(self):
 		with open(self.file_path, 'r') as f:
-			return f.read()
+		 	soup = BeautifulSoup(f.read())
+		return soup.body.article
+
 	def timestamp(self):
 		timestamp = subprocess.check_output(['git', 'log', '--diff-filter=A', '--pretty=%aD', '--', self.file_path]).decode().strip()
 		return datetime.strptime(timestamp, '%a, %d %b %Y %H:%M:%S %z') if timestamp else datetime.now(tz=timezone.utc)
 
 
 def compile(output_file, blog_posts):
-	output_file.write('<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="2" ></head><body>')
+	output_file.write('<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="30" ><meta name="viewport" content="width=device-width, initial-scale=1" ></head><body>')
+	output_file.write('<header><h1>jelford\'s blog</h1><nav><ul><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li></ul></nav></header>')
 
 	for b in reversed(sorted(blog_posts, key=lambda b: b.timestamp())):
-		output_file.write('<section class="blog_post">')
-		output_file.write(b.content())
-		output_file.write('</section>')
+		post = b.content()
+		post['class'] = 'blog_post'
+		output_file.write(str(post))
 
 	output_file.write('</body></html>')
 

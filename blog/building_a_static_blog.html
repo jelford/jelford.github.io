@@ -1,9 +1,19 @@
-<h2 id="building-a-static-blog-with-markdown-make-and-python">Building a static blog with Markdown, Make, and Python</h2>
-<h3 id="background">Background</h3>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="generator" content="pandoc" />
+	<link href="data:text/css,%0A%0Abody%20%7B%0A%20%20%20%20font%2Dfamily%3A%20sans%2Dserif%3B%0A%20%20%20%20margin%2Dleft%3A%20auto%3B%0A%20%20%20%20margin%2Dright%3A%20auto%3B%0A%7D%0A%0A%40media%20%28min%2Dwidth%3A%2055em%29%20%7B%0A%20%20%20%20body%20%7B%0A%20%20%20%20%20%20%20%20width%3A%2055em%3B%0A%20%20%20%20%7D%0A%7D%0A%0A%2Eblog%5Fpost%20%7B%0A%09border%2Dtop%3A%201px%20solid%20grey%3B%0A%7D%0A%0Aa%2Epermalink%20%7B%0A%20%20%20%20font%2Dsize%3A%200%2E9em%3B%0A%20%20%20%20font%2Dfamily%3A%20monospace%3B%0A%7D%0A%0Anav%20ul%20%7B%0A%09list%2Dstyle%2Dtype%3A%20none%3B%0A%09margin%3A%200%3B%0A%09padding%3A%200%3B%0A%7D%0A%0Anav%20ul%20li%20%7B%0A%09display%3A%20inline%3B%0A%09margin%2Dright%3A%200%2E3em%3B%0A%7D%0A" rel="stylesheet" type="text/css" />
+</head>
+<body>
+<article>
+<h1 class="title">Building a static blog with Markdown, Make, and Python</h1>
+<a class="permalink" href="/blog/building_a_static_blog.html">permalink</a>
+<h2 id="background">Background</h2>
 <p>I wanted to build a simple way to publish blog posts. I'm happy without any server-side gubbins; all I want it a simple place to put some static content, so github-pages is fine.</p>
 <p>The other must for me is to be able to use markdown to write in. I've tried just doing raw HTML in the past, and frankly it doesn't fill me with joy.</p>
 <p>Github has a tool built in, which you can install locally and test out - <a href="https://help.github.com/articles/using-jekyll-with-pages/">Jekyll</a> - but I wanted to use pandoc for compiling my markdown to HTML, and besides I don't have ruby installed.</p>
-<h3 id="managing-the-build">Managing the build</h3>
+<h2 id="managing-the-build">Managing the build</h2>
 <p>All the build needs to do is:</p>
 <ul>
 <li>figure out all the markdown files</li>
@@ -12,7 +22,7 @@
 </ul>
 <p>Sounds like a job for make. Besides, that gives me a chance to brush up on Makefiles.</p>
 <p>The rest of ths post goes through each of those steps, one by one. For reference, this whole site is checked in as a github page; you can easily check out the source for yourself <a href="https://github.com/jelford/jelford.github.io">here</a>.</p>
-<h3 id="gathering-the-markdown-files">Gathering the markdown files</h3>
+<h2 id="gathering-the-markdown-files">Gathering the markdown files</h2>
 <p>Make has built-in macros for grouping together a series of files from one place into a build target:</p>
 <pre><code>blog_sources := $(wildcard blog/*.md)
 blog_outputs := $(patsubst %.md,%.html,$(blog_sources))</code></pre>
@@ -26,25 +36,28 @@ blog_outputs := page_1.html this_blogpost.html that_blogpost.html</code></pre>
 $(blog_outputs) : $(blog_sources)
     convert_to_html $&lt; $@</code></pre>
 <p>So then we just have to implement the conversion and combining steps.</p>
-<h3 id="converting-to-html">Converting to HTML</h3>
+<h2 id="converting-to-html">Converting to HTML</h2>
 <p>I'll be using pandoc to convert markdown files to HTML. This couldn't be eaiser:</p>
 <pre><code>blog/%.html : blog/%.md 
     pandoc --email-obfuscation=javascript $&lt; -f markdown -t html5 -o $@</code></pre>
 <p>Notice this doesn't use <code>$(blog_outputs)</code> or <code>$(blog_sources)</code>. I found make was desperate to do <em>all</em> the <code>$(blog_outputs)</code> at once in the case they were the make target (makes sense), so this is a <a href="http://www.gnu.org/software/make/manual/make.html#Pattern-Intro">pattern rule</a>.</p>
-<h3 id="combining">Combining</h3>
+<h2 id="combining">Combining</h2>
 <p>Here's the simplest implementation I can think of for creating an easy-to-browse front page from all the inputs:</p>
 <pre><code>blog.html : $(blog_objects)
-    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
+    echo '&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html
     cat $(blog_objects) &gt;&gt; blog.html
-    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
 <p>That'll just concatenate all the pages together (in any old order) into one long page with all the content. Pretty spartan, but it does the job. Just one more thing so we don't all hate ourselves every time we load the page: adding a style sheet:</p>
 <pre><code>blog.html : $(blog_outputs)
-    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
+    echo '&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html
     cat $(blog_objects) &gt;&gt; blog.html
-    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
+    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
 <p>Over the course of the next few blog posts, I'll about adding nicities on top of this starting point:</p>
 <ul>
 <li>moving the combination step out of make into a script</li>
 <li>ordering the posts by some sort of date</li>
 <li>making the page load dynamically, so you don't just get everything on there as a one-er each time</li>
 </ul>
+</article>
+</body>
+</html>

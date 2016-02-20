@@ -1,8 +1,33 @@
+
+
 body {
     font-family: sans-serif;
+    margin-left: auto;
+    margin-right: auto;
 }
 
-section.blog_post {
+@media (min-width: 55em) {
+    body {
+        width: 55em;
+    }
+}
+
+.blog_post {
 	border-top: 1px solid grey;
 }
 
+a.permalink {
+    font-size: 0.9em;
+    font-family: monospace;
+}
+
+nav ul {
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+}
+
+nav ul li {
+	display: inline;
+	margin-right: 0.3em;
+}
