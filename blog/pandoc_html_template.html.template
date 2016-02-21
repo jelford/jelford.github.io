@@ -3,14 +3,29 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="generator" content="pandoc" />
+	<title>jelford's blog: $title$</title>
+	<link rel="stylesheet" href="/style.css" type="text/css"/>
+	<link rel="stylesheet" href="/styles/hljs/androidstudio.css" type="text/css"/>
 $for(css)$
 	<link rel="stylesheet" href="$css$" type="text/css" />
 $endfor$
+	<noscript>
+		<link rel="stylesheet" href="/styles/noscript.css" type="text/css" />
+	</noscript>
+	<script type="application/javascript" src="/js/blog-highlights.js"></script>
 </head>
 <body>
+<header>
+<h1>jelford's blog</h1>
+<nav><ul>
+<li><a href="/blog.html">blog</a></li><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li>
+</ul>
+</nav>
+</header>
 <article>
-<h1 class="title">$title$</h1>
-<a class="permalink" href="$permalink$">permalink</a>
+<header>
+<h1 class="title">$title$</h1><a class="permalink" href="$permalink$">permalink</a>
+</header>
 $body$
 </article>
 </body>

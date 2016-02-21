@@ -3,12 +3,26 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="generator" content="pandoc" />
-	<link href="data:text/css,%0A%0Abody%20%7B%0A%20%20%20%20font%2Dfamily%3A%20sans%2Dserif%3B%0A%20%20%20%20margin%2Dleft%3A%20auto%3B%0A%20%20%20%20margin%2Dright%3A%20auto%3B%0A%7D%0A%0A%40media%20%28min%2Dwidth%3A%2055em%29%20%7B%0A%20%20%20%20body%20%7B%0A%20%20%20%20%20%20%20%20width%3A%2055em%3B%0A%20%20%20%20%7D%0A%7D%0A%0A%2Eblog%5Fpost%20%7B%0A%09border%2Dtop%3A%201px%20solid%20grey%3B%0A%7D%0A%0Aa%2Epermalink%20%7B%0A%20%20%20%20font%2Dsize%3A%200%2E9em%3B%0A%20%20%20%20font%2Dfamily%3A%20monospace%3B%0A%7D%0A%0Anav%20ul%20%7B%0A%09list%2Dstyle%2Dtype%3A%20none%3B%0A%09margin%3A%200%3B%0A%09padding%3A%200%3B%0A%7D%0A%0Anav%20ul%20li%20%7B%0A%09display%3A%20inline%3B%0A%09margin%2Dright%3A%200%2E3em%3B%0A%7D%0A" rel="stylesheet" type="text/css" />
+	<title>jelford's blog: Building a static blog with Markdown, Make, and Python</title>
+	<link rel="stylesheet" href="/style.css" type="text/css"/>
+	<link rel="stylesheet" href="/styles/hljs/androidstudio.css" type="text/css"/>
+	<noscript>
+		<link rel="stylesheet" href="/styles/noscript.css" type="text/css" />
+	</noscript>
+	<script type="application/javascript" src="/js/blog-highlights.js"></script>
 </head>
 <body>
+<header>
+<h1>jelford's blog</h1>
+<nav><ul>
+<li><a href="/blog.html">blog</a></li><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li>
+</ul>
+</nav>
+</header>
 <article>
-<h1 class="title">Building a static blog with Markdown, Make, and Python</h1>
-<a class="permalink" href="/blog/building_a_static_blog.html">permalink</a>
+<header>
+<h1 class="title">Building a static blog with Markdown, Make, and Python</h1><a class="permalink" href="/blog/building_a_static_blog.html">permalink</a>
+</header>
 <h2 id="background">Background</h2>
 <p>I wanted to build a simple way to publish blog posts. I'm happy without any server-side gubbins; all I want it a simple place to put some static content, so github-pages is fine.</p>
 <p>The other must for me is to be able to use markdown to write in. I've tried just doing raw HTML in the past, and frankly it doesn't fill me with joy.</p>
@@ -44,14 +58,14 @@ $(blog_outputs) : $(blog_sources)
 <h2 id="combining">Combining</h2>
 <p>Here's the simplest implementation I can think of for creating an easy-to-browse front page from all the inputs:</p>
 <pre><code>blog.html : $(blog_objects)
-    echo '&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html
+    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
     cat $(blog_objects) &gt;&gt; blog.html
-    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
+    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
 <p>That'll just concatenate all the pages together (in any old order) into one long page with all the content. Pretty spartan, but it does the job. Just one more thing so we don't all hate ourselves every time we load the page: adding a style sheet:</p>
 <pre><code>blog.html : $(blog_outputs)
-    echo '&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html
+    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html
     cat $(blog_objects) &gt;&gt; blog.html
-    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
+    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
 <p>Over the course of the next few blog posts, I'll about adding nicities on top of this starting point:</p>
 <ul>
 <li>moving the combination step out of make into a script</li>

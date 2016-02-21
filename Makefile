@@ -9,13 +9,13 @@ blog_objects := $(patsubst %.md,%.html,$(blog_sources))
 all : $(tl_objects) blog.html
 
 $(tl_objects) : $(tl_sources) style.css
-	pandoc --email-obfuscation=javascript --self-contained --css=style.css --standalone $< -f markdown -t html5 -o $@
+	pandoc --no-highlight --email-obfuscation=javascript --css=style.css --standalone $< -f markdown -t html5 -o $@
 
 blog.html : $(blog_objects) compile_blog style.css
 	./compile_blog blog.html $(blog_objects)
 
 blog/%.html : blog/%.md	blog/pandoc_html_template.html.template style.css
-	pandoc --email-obfuscation=javascript --self-contained --css=style.css --standalone --template=blog/pandoc_html_template.html.template -V permalink=/$@ $< -f markdown -t html5 -o $@
+	pandoc --no-highlight --email-obfuscation=javascript --standalone --template=blog/pandoc_html_template.html.template -V permalink=/$@ $< -f markdown -t html5 -o $@
 
 clean : 
 	find . -name '*.html' -exec rm {} \;

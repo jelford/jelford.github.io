@@ -3,12 +3,26 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="generator" content="pandoc" />
-	<link href="data:text/css,%0A%0Abody%20%7B%0A%20%20%20%20font%2Dfamily%3A%20sans%2Dserif%3B%0A%20%20%20%20margin%2Dleft%3A%20auto%3B%0A%20%20%20%20margin%2Dright%3A%20auto%3B%0A%7D%0A%0A%40media%20%28min%2Dwidth%3A%2055em%29%20%7B%0A%20%20%20%20body%20%7B%0A%20%20%20%20%20%20%20%20width%3A%2055em%3B%0A%20%20%20%20%7D%0A%7D%0A%0A%2Eblog%5Fpost%20%7B%0A%09border%2Dtop%3A%201px%20solid%20grey%3B%0A%7D%0A%0Aa%2Epermalink%20%7B%0A%20%20%20%20font%2Dsize%3A%200%2E9em%3B%0A%20%20%20%20font%2Dfamily%3A%20monospace%3B%0A%7D%0A%0Anav%20ul%20%7B%0A%09list%2Dstyle%2Dtype%3A%20none%3B%0A%09margin%3A%200%3B%0A%09padding%3A%200%3B%0A%7D%0A%0Anav%20ul%20li%20%7B%0A%09display%3A%20inline%3B%0A%09margin%2Dright%3A%200%2E3em%3B%0A%7D%0A" rel="stylesheet" type="text/css" />
+	<title>jelford's blog: Building a better blog: organising output</title>
+	<link rel="stylesheet" href="/style.css" type="text/css"/>
+	<link rel="stylesheet" href="/styles/hljs/androidstudio.css" type="text/css"/>
+	<noscript>
+		<link rel="stylesheet" href="/styles/noscript.css" type="text/css" />
+	</noscript>
+	<script type="application/javascript" src="/js/blog-highlights.js"></script>
 </head>
 <body>
+<header>
+<h1>jelford's blog</h1>
+<nav><ul>
+<li><a href="/blog.html">blog</a></li><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li>
+</ul>
+</nav>
+</header>
 <article>
-<h1 class="title">Building a better blog: organising output</h1>
-<a class="permalink" href="/blog/organising_blog_output_nicely.html">permalink</a>
+<header>
+<h1 class="title">Building a better blog: organising output</h1><a class="permalink" href="/blog/organising_blog_output_nicely.html">permalink</a>
+</header>
 <p>In the last entry, I walked through using a simple make-file to generate the HTML for a simple blog - it will convert a collection of markdown files into HTML snippets, then concatenate them into a single &quot;blog&quot; page.</p>
 <p>In this entry, we'll build on that by managing multiple entries more in a nicer way:</p>
 <ul>
@@ -34,9 +48,9 @@
 <pre><code>&lt;meta http-equiv=&quot;refresh&quot; content=&quot;5&quot; &gt;</code></pre>
 <p>So our final make step now looks like this:</p>
 <pre><code>blog.html : $(blog_objects) 
-    echo '&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html 
+    echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html 
     cat $(blog_objects) &gt;&gt; blog.html 
-    echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
+    echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
 <p>Now, nobody like pages that auto-refresh while they're looking at them, so I'd like to take this out before pushing anything up, but there are a couple of things that mean it wouldn't be <em>the worst thing ever</em> if we forget:</p>
 <ul>
 <li>It looks like (Firefox at least) it nice enough to maintain your postion on the page between refreshes</li>
@@ -50,9 +64,9 @@
 
 --- ./compile_blog ---
 #! /usr/bin/env sh
-echo '&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;' &gt; blog.html 
+echo &#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39; &gt; blog.html 
 cat $@ &gt;&gt; blog.html 
-echo '&lt;/body&gt;&lt;/html&gt;' &gt;&gt; blog.html</code></pre>
+echo &#39;&lt;/body&gt;&lt;/html&gt;&#39; &gt;&gt; blog.html</code></pre>
 <p>Phew. That's better. Okay, now let's move to using a nicer language than <code>sh</code> for manipulating files. We'll use python, since that's what I like.</p>
 <pre><code>#! /usr/bin/env python3
 
@@ -60,24 +74,24 @@ import argparse
 import sys
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description='Combine blog posts into a single page')
-    parser.add_argument('output_file', type=argparse.FileType('w'))
-    parser.add_argument('input_files', nargs=argparse.REMAINDER)
+    parser = argparse.ArgumentParser(description=&#39;Combine blog posts into a single page&#39;)
+    parser.add_argument(&#39;output_file&#39;, type=argparse.FileType(&#39;w&#39;))
+    parser.add_argument(&#39;input_files&#39;, nargs=argparse.REMAINDER)
 
     args = parser.parse_args(sys.argv[1:])
     return args.output_file, args.input_files
 
 
-if __name__ == '__main__':
+if __name__ == &#39;__main__&#39;:
     output_file, input_files = parse_args(sys.argv[1:])
         
-    output_file.write('&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;')
+    output_file.write(&#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39;)
 
     for entry_path in input_files:
-        with open(entry_path, 'r') as blog_entry:
+        with open(entry_path, &#39;r&#39;) as blog_entry:
             output_file.write(blog_entry.read())
 
-    output_file.write('&lt;/body&gt;&lt;/html&gt;')</code></pre>
+    output_file.write(&#39;&lt;/body&gt;&lt;/html&gt;&#39;)</code></pre>
 <p>Finally, let's make it so that our main page re-compiles any time we make changes to its build script:</p>
 <pre><code>blog.html : $(blog_objects) compile_blog
     ...</code></pre>
@@ -89,21 +103,21 @@ if __name__ == '__main__':
         self.file_path = file_path
 
     def content(self):
-        with open(self.file_path, 'r') as f:
+        with open(self.file_path, &#39;r&#39;) as f:
             return f.read()
 
 def compile(output_file, blog_posts):
-    output_file.write('&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;')
+    output_file.write(&#39;&lt;html&gt;&lt;head&gt;&lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;style.css&quot; &gt;&lt;meta http-equiv=&quot;refresh&quot; content=&quot;2&quot; &gt;&lt;/head&gt;&lt;body&gt;&#39;)
 
     for b in blog_posts:
         output_file.write(b.content())
 
-    output_file.write('&lt;/body&gt;&lt;/html&gt;')
+    output_file.write(&#39;&lt;/body&gt;&lt;/html&gt;&#39;)
 
 def compile_files(output_file, input_paths):
     compile(output_file, (BlogPost(p) for p in input_paths))
 
-if __name__ == '__main__':
+if __name__ == &#39;__main__&#39;:
     compile_files(*parse_args(sys.argv[1:]))</code></pre>
 <p>Now we've got a model, we can sort the blog posts by the details - in this case, I want the time the file was create (or, added to git, as a reasonable proxy, since I want it to survive renamed, checkouts elsewhere, that sort of thing).</p>
 <pre><code>import subprocess
@@ -114,9 +128,9 @@ import timezone
 class BlogPost():
     ...
     def timestamp(self):
-        timestamp = subprocess.check_output(['git', 'log', '--diff-filter=A', '--pretty=%aD' , '--', self.file_path]).decode().strip()
-        return datetime.strptime(timestamp, '%a, %d %b %Y %H:%M:%S %z') if timestamp \
-            else datetime.now(tz=timezone.utc) # if the file's not yet in git
+        timestamp = subprocess.check_output([&#39;git&#39;, &#39;log&#39;, &#39;--diff-filter=A&#39;, &#39;--pretty=%aD&#39; , &#39;--&#39;, self.file_path]).decode().strip()
+        return datetime.strptime(timestamp, &#39;%a, %d %b %Y %H:%M:%S %z&#39;) if timestamp \
+            else datetime.now(tz=timezone.utc) # if the file&#39;s not yet in git
 
 ...
 
@@ -128,9 +142,9 @@ def compile(...):
 <pre><code>def compile(...):
     ...
     for b in ...
-        output_file.write('&lt;section class=&quot;blog_post&quot;&gt;')
+        output_file.write(&#39;&lt;section class=&quot;blog_post&quot;&gt;&#39;)
         output_file.write(b.content())
-        output_file.write('&lt;/section&gt;')</code></pre>
+        output_file.write(&#39;&lt;/section&gt;&#39;)</code></pre>
 <p>And we'll put something in <code>style.css</code> to make that visible:</p>
 <pre><code>section.blog_post {
     border-top: 1px solid grey;

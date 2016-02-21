@@ -32,8 +32,17 @@ class BlogPost():
 
 
 def compile(output_file, blog_posts):
-	output_file.write('<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="30" ><meta name="viewport" content="width=device-width, initial-scale=1" ></head><body>')
-	output_file.write('<header><h1>jelford\'s blog</h1><nav><ul><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li></ul></nav></header>')
+	output_file.write('<html>')
+	output_file.write('<head>')
+	output_file.write('<title>jelford\'s blog</title>')
+	output_file.write('<link rel="stylesheet" type="text/css" href="style.css" />')
+	output_file.write('<link rel="stylesheet" type="text/css" href="styles/hljs/androidstudio.css" />')
+	output_file.write('<noscript><link rel="stylesheet" type="text/css" href="styles/noscript.css" /></noscript>')
+	output_file.write('<script type="application/javascript" src="/js/blog-highlights.js"></script>')
+	output_file.write('</head>')
+	output_file.write('<body>')
+
+	output_file.write('<header><h1>jelford\'s blog</h1><nav><ul><li><a href="/blog.html">blog</a></li><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li></ul></nav></header>')
 
 	for b in reversed(sorted(blog_posts, key=lambda b: b.timestamp())):
 		post = b.content()

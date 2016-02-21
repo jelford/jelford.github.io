@@ -1,6 +1,145 @@
-<html><head><link rel="stylesheet" type="text/css" href="style.css" ><meta http-equiv="refresh" content="30" ><meta name="viewport" content="width=device-width, initial-scale=1" ></head><body><header><h1>jelford's blog</h1><nav><ul><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li></ul></nav></header><article class="blog_post">
-<h1 class="title">Bringing things together as a blog</h1>
-<a class="permalink" href="/blog/styling_the_front_page.html">permalink</a>
+<html><head><title>jelford's blog</title><link rel="stylesheet" type="text/css" href="style.css" /><link rel="stylesheet" type="text/css" href="styles/hljs/androidstudio.css" /><noscript><link rel="stylesheet" type="text/css" href="styles/noscript.css" /></noscript><script type="application/javascript" src="/js/blog-highlights.js"></script></head><body><header><h1>jelford's blog</h1><nav><ul><li><a href="/blog.html">blog</a></li><li><a href="/">home</a></li><li><a href="https://github.com/jelford">github</a></li></ul></nav></header><article class="blog_post">
+<header>
+<h1 class="title">More styling</h1><a class="permalink" href="/blog/more_styling.html">permalink</a>
+</header>
+<p>To make things not horrible, let's do a bit of styling:</p>
+<ul>
+<li>Get rid of the wall-of-text on large screens</li>
+<li>Format code segments a bit nicer</li>
+<li>Give the page a title so it looks nicer in the browser</li>
+</ul>
+<h2 id="resize-the-page-according-to-screen-size">Resize the page according to screen size</h2>
+<p>We're not going to do anything very clever here - I just hate trying to read pages that span the whole width of my screen with text. It's not that easy to read (I still line-wrap at 80 characters in vim).</p>
+<p>We can add the following to <code>style.css</code>:</p>
+<pre><code>body {
+    ...
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 55em;
+}</code></pre>
+<p>And we're done with widths. <code>max-width</code> won't have any effect on smaller displays, but when we open it up on a widescreen monitor, the text will stay within a reasonably widthed area, in the middle of the viewport.</p>
+<h2 id="prettify-the-code">Prettify the code</h2>
+<p>pandoc supports code highlighting, to some extent, using the following syntax (<a href="http://pandoc.org/README.html#fenced-code-blocks">docs</a>):</p>
+<pre class="markdown sourcecode"><code>~~~ { .css }
+...
+~~~</code></pre>
+<p>That generates HTML like:</p>
+<pre class="html sourcecode"><code>&lt;tbody&gt;&lt;tr class="sourceCode"&gt;&lt;td class="lineNumbers"&gt;&lt;pre&gt;1
+2
+3
+4
+5
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="sourceCode"&gt;&lt;pre&gt;&lt;code class="sourceCode css"&gt;pre code &lt;span class="kw"&gt;{&lt;/span&gt;
+    &lt;span class="kw"&gt;display:&lt;/span&gt; &lt;span class="dt"&gt;block&lt;/span&gt;&lt;span class="kw"&gt;;&lt;/span&gt;
+    &lt;span class="kw"&gt;background-color:&lt;/span&gt; &lt;span class="dt"&gt;#EEEEEE&lt;/span&gt;&lt;span class="kw"&gt;;&lt;/span&gt;
+    &lt;span class="kw"&gt;overflow-x:&lt;/span&gt; &lt;span class="dt"&gt;auto&lt;/span&gt;&lt;span class="kw"&gt;;&lt;/span&gt;
+&lt;span class="kw"&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;</code></pre>
+<p>Unfortunately, this isn't actually super easy to style up in CSS - you're stuck with table-based layout (if you enable line numbers), and we'll have to do something about actually having some meaningful CSS to make the highlighting look good. Okay, we'll try something else (not writing our own generic lexer) - enter <a href="https://highlightjs.org/">highlight.js</a>.</p>
+<p>Now, I <em>do</em> want to use the feature of pandoc where we can conveniently add css classnames to our fenced code blocks, so we won't turn the extension off entirely - but I'll add a <code>--no-highlight</code> line to my pandoc make tasks. That leaves the task of adding the highlighting up to highlight.js. We want something like (pseudocode):</p>
+<pre class="javascript sourcecode"><code>var code = document.querySelectorAll('pre.sourcecode');
+for (let block of code) {
+    hljs.do_highlighting_please(...);
+}</code></pre>
+<p>Since we're already thinking about doing our own initialization, we might as well take the time to put this work off the main thread; there's no need to block the whole browser while we apply styling. Luckily the highlight.js instructions come with a recipe for putting the work onto a worker thread:</p>
+<pre class="javascript sourcecode"><code>// in the main script:
+addEventListener('load', function() {
+  var code = document.querySelector('#code');
+  var worker = new Worker('worker.js');
+  worker.onmessage = function(event) { code.innerHTML = event.data; }
+  worker.postMessage(code.textContent);
+})
+
+// in worker.js:
+onmessage = function(event) {
+  importScripts('&lt;path&gt;/highlight.pack.js');
+  var result = self.hljs.highlightAuto(event.data);
+  postMessage(result.value);
+}</code></pre>
+<p>That won't quite do for us; we've got more than one code block - so we need to adapt what's going on in the main script to handle that. We <em>could</em> just change</p>
+<pre class="javascript sourcecode"><code>  var code = document.querySelector('#code');
+  ...</code></pre>
+<p>to</p>
+<pre class="javascript sourcecode"><code>  var code = document.querySelectorAll('pre.sourcecode');
+  for (let block of code) {
+    ...
+  }</code></pre>
+<p>but it's not necessarily fine to just spawn an infinite number of worker threads. According to <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#About_thread_safety">mdn</a>, each worker spawns a real OS-level thread. Potentially, that's very expensive; and we don't really need loads of work going on in parallel - we're just trying to do some syntax highlighting!</p>
+<p>Let's adapt the code so that we send all our requests to a single worker, and when we get the results back, they have a key that lets us put them in the correct code block:</p>
+<pre class="javascript sourcecode"><code>// in js/blog-highlight.js
+document.addEventListener('DOMContentLoaded', function() {
+    /* no .sourcecode anymore; turns our all our pres are code, so it's redundant */
+    var code = document.querySelectorAll('pre'); 
+    var worker = new Worker('js/highlight-worker.js');
+
+    worker.onmessage = function(event) { 
+        let target = code[event.data.sourceid].lastChild
+        target.innerHTML = event.data.content; 
+        target.classList.add('hljs');
+    };
+
+    // Can't pass the actual nodes to the workers, so use the list index as a kind of key
+    for (let i=0; i&lt;code.length; ++i) {
+        worker.postMessage({
+            content: code[i].lastChild.textContent, 
+            sourceid: i
+        });
+    }
+});
+
+
+// in js/highlight-worker.js
+importScripts('/js/highlight.pack.js');
+
+onmessage = function(event) {
+    console.log(event);
+    var result = self.hljs.highlightAuto(event.data.content);
+    postMessage({sourceid: event.data.sourceid, content: result.value});
+}</code></pre>
+<p>We'll have to add <code>js/blog-highlight.js</code> to both the front page, and the individual page templates. Once we've done that, there's just one more thing bothering me; how does it look for people without javascript? (hint: not good).</p>
+<p>We can do something about that though; let's script up a very simple code pane style for clients without javascipt. In our HTML it'll look something like this:</p>
+<pre class="sourcecode html"><code>&lt;head&gt;
+    ...
+    &lt;noscript&gt;
+        &lt;link rel="stylesheet" type="text/css" href="/styles/noscript.css"&gt;
+    &lt;/noscript&gt;
+    ...
+&lt;/head&gt;</code></pre>
+<pre class="sourcecode css"><code>pre code {
+    background-color: #F0F0F0;
+    display: block;
+    padding: 5px;
+    border-radius: 5px;
+}</code></pre>
+<p>At that point, arguably, we're done pretifying the code.</p>
+<h2 id="adding-a-title">Adding a title</h2>
+<p>We already took the time to get pandoc to be aware of the page title (that's what generates our <code>&lt;h1&gt;</code> tags at the top of each post). Let's use the same capability to add <code>&lt;title&gt;</code> tags to our blog post <code>&lt;head&gt;s</code>.</p>
+<p>In <code>blog/pandoc_html_template.html.template</code>:</p>
+<pre class="sourcecode html"><code>&lt;head&gt;
+    ...
+    &lt;title&gt;$title$&lt;/title&gt;
+    ...
+&lt;/head&gt;</code></pre>
+<p>We'd better also add a similar thing in the top-level page, but that'll say something like:</p>
+<pre class="sourcecode python"><code>    output_file.write('&lt;title&gt;jelford\'s blog&lt;/title&gt;')</code></pre>
+<p>That's all we need to get a decent title up at the top of the screen.</p>
+<h2 id="back-links-from-blog-entries">Back links from blog entries</h2>
+<p>One final thing I didn't mention at the start; I'm going to add a nav bar at the top of the individual blog entries. That makes it easier to get back to reading the main page from inside a blog:</p>
+<pre class="sourcecode html"><code>&lt;body&gt;
+    &lt;header&gt;
+        &lt;nav&gt;
+            &lt;ul&gt;
+                &lt;li&gt;&lt;a href="/blog.html"&gt;blog&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="/"&gt;home&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="https://github.com/jelford"&gt;github&lt;/a&gt;&lt;/li&gt;
+            &lt;/ul&gt;
+        &lt;/nav&gt;
+    &lt;/header&gt;
+    &lt;article&gt;
+        ...</code></pre>
+</article><article class="blog_post">
+<header>
+<h1 class="title">Bringing things together as a blog</h1><a class="permalink" href="/blog/styling_the_front_page.html">permalink</a>
+</header>
 <p>So far we've taken a simple approach to gluing everyting together, but it'd be good to have a couple of the niceties that make things seem like more than just... a wall of text on a page.</p>
 <p>I can think of a couple of nice features that would make things look better:</p>
 <ul>
@@ -162,8 +301,9 @@ nav ul li {
     margin-right: 0.3em;
 }</code></pre>
 </article><article class="blog_post">
-<h1 class="title">Building a better blog: organising output</h1>
-<a class="permalink" href="/blog/organising_blog_output_nicely.html">permalink</a>
+<header>
+<h1 class="title">Building a better blog: organising output</h1><a class="permalink" href="/blog/organising_blog_output_nicely.html">permalink</a>
+</header>
 <p>In the last entry, I walked through using a simple make-file to generate the HTML for a simple blog - it will convert a collection of markdown files into HTML snippets, then concatenate them into a single "blog" page.</p>
 <p>In this entry, we'll build on that by managing multiple entries more in a nicer way:</p>
 <ul>
@@ -291,8 +431,9 @@ def compile(...):
     border-top: 1px solid grey;
 }</code></pre>
 </article><article class="blog_post">
-<h1 class="title">Building a static blog with Markdown, Make, and Python</h1>
-<a class="permalink" href="/blog/building_a_static_blog.html">permalink</a>
+<header>
+<h1 class="title">Building a static blog with Markdown, Make, and Python</h1><a class="permalink" href="/blog/building_a_static_blog.html">permalink</a>
+</header>
 <h2 id="background">Background</h2>
 <p>I wanted to build a simple way to publish blog posts. I'm happy without any server-side gubbins; all I want it a simple place to put some static content, so github-pages is fine.</p>
 <p>The other must for me is to be able to use markdown to write in. I've tried just doing raw HTML in the past, and frankly it doesn't fill me with joy.</p>
