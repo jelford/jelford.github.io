@@ -1,8 +1,9 @@
 ---
 title: Longevity in software engineering
-layout: post.liquid
-is_draft: true
 excerpt: How long should we expect themes and technologies in software engineering to last?
+published_date: "2020-06-14 15:32:36 +0000"
+layout: post.liquid
+is_draft: false
 ---
 How long should we expect themes and technologies in software engineering to last?
 In this post, we'll look at how long individual projects "last" based on data from GitHub
