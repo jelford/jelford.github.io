@@ -1,3 +1,6 @@
 [submodule "greasemonkey-scripts"]
 	path = greasemonkey-scripts
 	url = https://github.com/jelford/greasemonkey-scripts.git
+[submodule "blag/themes/ananke"]
+	path = blag/themes/ananke
+	url = https://github.com/budparr/gohugo-theme-ananke.git
