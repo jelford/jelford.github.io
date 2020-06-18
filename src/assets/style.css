@@ -11,3 +11,21 @@ body {
 img {
 	max-width: 100%;
 }
+
+.post-meta-info {
+    color: grey;
+    font-size: 0.8em;
+}
+
+.breadcrumbs {
+    font-family: monospace;
+    color: grey;
+}
+
+.breadcrumbs a:link {
+    color: grey;
+}
+
+.breadcrumbs a:visited {
+    color: grey;
+}

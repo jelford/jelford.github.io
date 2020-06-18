@@ -4,8 +4,21 @@
     {% include "head.liquid" %}
     </head>
     <body>
-    <h1><a href="/blog.html">~jelford/blog:</a></h1>
-    <h2>{{page.title}}</h2>
-    {{ page.content }}
+    <header>
+        <h1 class="breadcrumbs"><a href="/">~jelford</a> / <a href="/blog.html">blog:</a></h1>
+    </header>
+    <article itemscope itemtype="http://schema.org/BlogPosting">
+        <header>
+        <h2 itemprop="name">{{page.title}}</h2>
+        <p class="post-meta-info">
+            Published on 
+            <time itemprop="datePublished" datetime="{{ page.published_date | date: '%Y-%m-%d' }}">{{ page.published_date | date: '%Y-%m-%d' }}</time>. 
+            <a href="{{ page.permalink }}">(permalink)</a>
+        </p>
+        </header>
+        <main itemprop="articleBody">
+        {{ page.content }}
+        </main>
+    </article>
     </body>
 </html>
