@@ -1,7 +1,12 @@
-
+source: "src"
+ignore:
+  - ".venv/"
+  - "*.swp"
+  - "~*"
+  - "_*"
 site:
-  title: cobalt blog
-  description: Blog Posts Go Here
-  base_url: http://example.com
+  title: james elford
+  description: james elford's personal site
+  base_url: https://jameselford.com
 posts:
   rss: rss.xml

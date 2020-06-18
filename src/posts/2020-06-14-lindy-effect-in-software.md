@@ -9,19 +9,23 @@ How long should we expect themes and technologies in software engineering to las
 In this post, we'll look at how long individual projects "last" based on data from GitHub
 and try to draw conclusions around what that means for choosing foundational software.
 
-Software comes and goes - except when it doesn't. When we're building something new, 
+Software comes and goes - except when it doesn't; we can all think of technologies like
+Fortran and COBOL that have been around forever, and continue to fulfil a useful purpose
+in their particular niche. When we're building something new, 
 what kind of technologies should we build on? Should we seek maturity
 and stability - perhaps seeking to reduce the constant churn of keeping up with
 the latest updates, and benefit from the battle-hardening effect of exposure to
-the real world and the passing of time - or should we eschew staleness, and 
+the real world and the passing of time; or should we eschew staleness, and 
 build on foundations that aren't already aproaching the end of their shelf-life - 
 benefiting from the latest advances in technology, and learning from the mistakes
-of those who went before.
+of those who went before. When we look at our depenedencies on other projects, can
+we guess how long they will continue to be around for?
 
 It goes without saying that our choice will depend on what it is we're building;
 are we most concerned with getting an idea in front of users ASAP, or with
 the ongoing cost of maintenance once we've shipped? Are we reasonably sure about
-the problem space, or do we expect a lot of before we have the basics right? 
+the problem space, or do we expect a lot of iteration before we have the basics
+right? 
 
 ## what can we know?
 
@@ -45,7 +49,7 @@ in a few years' time based on how long it has been around.
   that we can just a thing's life expentancy by how long it has already been
   around - and that the life expentancy *increases* with every year something
   has been around (contingent on the thing not having some natural upper limit;
-  sofware being an obvious example of something non-perishable)
+  sofware being an obvious example of something non-perishable).
   
 Inspired by both of these ideas, let's make a hypothesis:
 
@@ -105,9 +109,10 @@ A few remarks:
   
   None of this should be hugely surprising; people can write whatever they want
   in their commit history, and sometimes they (or their tools) will write nonsense!
+  To them, it may not be nonsense.
 - The [GitHub press release](https://medium.com/google-cloud/github-on-bigquery-analyze-all-the-code-b3576fd2b150) says that "Forks and/or 
   un-notable projects not included." I'm not so sure about that (c.f. the
-  multiple copies of Go referenced above). Again, hardly surprising; it wouldn't
+  multiple copies of Go mentioned above). Again, hardly surprising; it wouldn't
   be easy for GitHub to reliably detect forks; it's perfectly possible to have
   two completely separate projects that happen to share some commits, but neither
   one obviusly be a fork of the other.
@@ -125,11 +130,13 @@ In the query above, I've taken a few steps to try to filter out things that I'm
 
 So, what do we find?
 
-## results
+## exploration
 
 Here are some plots of the distributions of project age.
 
-First, a straightforward plot of the distribution of project lifetimes:
+First, a straightforward plot of the distribution of project lifetimes. On the
+left is the whole dataset, and on the right are just those whose lifetimes
+exceed 10 years:
 ![Graph showing the distribution plot of project lifetimes in years](lindy-tech/project_age_years_hist.svg)
 
 There are only 32 projects in the dataset with an age > 20 years. That's such a
@@ -162,33 +169,41 @@ Finally, the same data on a log-log scale:
 A couple of observations:
 - Power-law distributions (of the type described by Taleb's expression of the 
   Lindy Effect above) [show a straight line on a log-log plot](https://en.wikipedia.org/wiki/Power_law#Graphical_methods_for_identification)
-  as a necessary-but-not-sufficient condition. We don't seem to see that here;
-  implying that, at least by this measure of project lifespan, projects on github
-  *don't* follow a power-law distribution with respect to age.
+  as a necessary-but-not-sufficient condition. We see something a bit like that,
+  after around the 4 year mark. 
 - We see a clear straight downward slope on the log-graph, once a project reaches
-  its fourth year
+  its fourth year.
+
+## results
 
 Now, back to our hypothesis:
 
 > The longer a project has been around, the longer its expected remaining life.
 
-Here's a graph of expected (mean) lifespan (on the y-axis), predicated on current
-lifespan in years (on the x-axis). First time round, let's re-include 32 
-projects with a lifespan > 20 years:
+Let's look at two graphs of expected (mean) lifespan (on the y-axis), predicated
+on current lifespan in years (on the x-axis). The *nth-percentile* lines show the
+distribution of our sample data. First, let's zoom out and get the fullest 
+picture we can; we'll re-include the 32 projects with a lifespan > 20 years:
 
 ![Graph showing a steep upward slope of projects' remaining life expectancy after they pass 6 years of age](lindy-tech/remaining_life_expectancy_all.svg)
 
-Woah there. Taken at face value, this graph seems to imply that our hypothesis
-is true, in a big way: a project's remaining life expectancy increases once
-it hits four years of age, and damatically so after about 15 years. But remember,
-we've only got 32 data points (some of which we know to be junk) after the 20
-year mark, so a few data points are going to dominate the picture. To emphasize 
-how little data we have here, I've included the KDE we saw earlier in grey.
+Woah there. A couple of things jump out:
+- This graph seems to imply that our hypothesis has some merit (in terms of 
+  mean life expectancy, at least), in a big way for older projects: a 
+  project's remaining life expectancy ramps up damatically after about 15 
+  years or so.
+- Our 30th- and 50th-percentile lines *stay* low, never exceeding the 2 year 
+  mark while we have >100 projects in the sample.
+- Mean life expectancies seem to be dominated by a few very long-lived projects,
+  but remember, we've only got 32 data points after the 20 year mark, and as we
+  discussed above, it's not clear that these represent particularly useful data 
+  points. To emphasize how little data we have here, I've included the sample
+  counts on the right-hand axis (in grey).
 
 What can we do about this?
-- If we chop the data down to exclude data points >, say, 15 years, then we
-  will be imposing an artificial limit on the upper bound of life expectancy.
-  This would rule out our hypothesis by construction.
+- If we chop the data down to exclude data points greater than, say, 15
+  years, then we will be imposing an artificial limit on the upper bound 
+  of life expectancy. This would rule out our hypothesis by construction.
 - We can keep all the data, but only look at the remaining life expectancies
   for those with "enough" data points after them to make some resonable
   judgement of what that expectancy might be.
@@ -196,7 +211,7 @@ What can we do about this?
 I've done... a mix:
 - I've projected the remaining life expectancy only of projects up to 10 years
   of age. There are still a decent number of projects older than that that we can
-  hope to use to project a life expectancy.
+  hope to use to estimate a life expectancy.
 - To estimate that remaining life expectancy, I've excluded projects where
   the recorded life span is > 30 years. The projects in that group are just 
   too noisey to consider.
@@ -212,9 +227,16 @@ project, given its current age.
 
 ![Graph showing remaining life expectancy of projects up to 10 years of age](lindy-tech/remaining_life_expectancy_sub_10.svg)
 
-I think that leaves us with a much more guarded conclusion: at around the four
-year mark, projects seem to reach some sort of maturity threshold or critical 
-mass, and from then on their expected remaining lifetime may increase.
+Nothing really jumps out here; so I'll venture some more modest conclusions:
+- By our measure of project lifetime, age doesn't seem to tell us anything
+  much about expected remaining life expectancy. That's more "lindy" than, say,
+  remaining human life expectancy (broadly, decreases as we age), but doesn't 
+  show the kind of growth I expected.
+- Even projects that have been going for some years are more likely than not to
+  meet our definition of "done" over the next two. That certainly doesn't match
+  my intuition; I expected that network effects and inertia would play a big part
+  in extending the longevity of projects that had been going for a long time. 
+  Perhaps that's an indictment of our definition of "done".
 
 ## further work
 
@@ -225,17 +247,30 @@ Better analysis:
   things I'd want to think about for a really confident idea of a project 
   being "done" might include:
   - Are new issues being filed in the issue tracker? This implies that
-    *someone* is still using it
-  - Are issues being reponsded to?
+    *someone* is still using it.
+  - Are issues being responded to?
   - Is there an active StackOverflow community?
 - Cohorting of project types; perhaps libraries have very different
   lifecycles to programming languages? How about frameworks vs. libraries?
+  Applications? Personal websites, like this one?
 
 Sources of bias in the data:
 - How to account for still-live projects? This analysis excludes any projects
-  that are still active - and if the hypothesis is true (longer-lived projects
-  will stay active), then this sampling bias will skew results against that
-  conclusion.
+  that are still active - and if the original hypothesis is true (longer-lived 
+  projects will stay active), then this sampling bias will skew results against
+  that conclusion.
 - There are plenty of long-lived projects that would meaningfully contribute 
-  to the long tail. By excluding "old" projects, I'm excluding exactly those
-  that could provide the most interesting counterexamples.
+  to the long tail. By excluding the really "old" projects, I'm excluding 
+  exactly those that could provide the most interesting data points.
+- The original dataset as derived from the GitHub public data is not reflective
+  of all open source projects. Some notable exclusions:
+  - Corporate / closed-open-source. These projects have diffirent
+    fundamentals affecting their lifetimes. Whilst many open source projects
+    rest on the labour of a few individuals, corporates replace individual team
+    members, and I venture that *most* professional engineers will have at some
+    point worked on systems where none of the original authors is still on the 
+    team.
+  - There is an open-source world beyond GitHub, and the older the project, the
+    more likely that it had some established code hosting solution before
+    GitHub rose to prominence. Some of those projects will be included via
+    GitHub-hosted mirrors, but certainly not all. 
