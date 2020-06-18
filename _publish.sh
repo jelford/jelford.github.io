@@ -21,4 +21,4 @@ git commit -m "Updated website build on $(date)"
 git push
 popd
 
-#git worktree remove ${checkout_dir}
+git worktree remove ${checkout_dir}
