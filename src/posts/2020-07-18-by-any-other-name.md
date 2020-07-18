@@ -1,5 +1,5 @@
 ---
-title: By any other name
+title: altogether too much detail about host name resolution
 published_date: "2020-07-18 17:51:27 +00:00"
 layout: post.liquid
 is_draft: false
