@@ -6,42 +6,58 @@ is_draft: true
 In this post we'll take a look under the covers at what happens we look up hosts.
 
 If you're here, you'll have an idea that the answer is basically "DNS" - but 
-that's not the whole story. In this post, I want to get somewhat down in the
-details - we won't talk about how the _network protocol_ works, but instead 
-we'll talk about how a _local application_ ends up interacting with the various
-components of host resolution.
+that's not the whole story. Let's make things concrete; we're going to answer 
+the question: how does the following snippet of (pseudo-)code figure out what 
+host to connect to?
 
-Let's make that concrete; we're going to answer the question: how does the
-following snippet of code figure out what host to connect to?
-
-```rust
-fn do_connect() {
-    let _c = TcpStream::connect("www.jameselford.com:443");  // <-- this call
-}
+```c++
+conn = socket::connect("www.jameselford.com", 443);
 ```
 
+DNS is just one part of the answer.
+
+## tl;dr
+
+_Most_ programs on a normal linux system will look in `/etc/nsswitch.conf` to
+figure out how to resolve hostnames. But lots of programs won't. Pretty
+much everything will find your DNS servers in `/etc/resolv.conf`. Generally,
+this process will involve a call to `getaddrinfo`, provided by your system's 
+standard C library.
+
+If that's what you came to find out, then you can go back to the internet now;
+thanks for your time. Stick around if you want to get into altogether too much
+detail about how this all happens.
+
+## what's coming up
+
 We'll see:
-- How our program ends up calling out to `libc` (by diving into the source)
+- How our program ends up calling into `libc` (by diving into the source)
 - How `libc` resolves our hostname (with a little help from `strace`)
 - and along the way, some opportunities to tweak how our system does host lookup
 
-The early code snippets are Rust, and we'll dig though the standard library, but
-you could do a similar journey for any high-level programming language. In C,
-you'd just skip the first step and go straight to `libc`.
+We'll start in Rust land, because that's kind of my jam, but
+you could do a similar journey for any high-level programming language. Maybe
+you hate jam. Maybe you're more of a Python / marmalade / Ruby sort of person.
+That's fine too; ultimately it doesn't matter how you do it, so long as there's
+a thick layer of sugar on your breakfast. In C, you'd just skip the first step 
+and go straight to `libc`. I guess in this analogy, C is the toast.
 
-Without further ado, let's get right into the code.
+## check the source - peeking into the (Rust) standard library
 
-## check the source - peeking into the standard library
+In Rust, the pseudo-code above looks like this:
 
-The first port of call is to check in the source. `TcpStream::connect` takes an
-argument for which there's a conversion in the form of a `ToSocketAddrs`
-implementation - and the standard library comes with implementors for
-[a whole range of sensible types](https://doc.rust-lang.org/std/net/trait.ToSocketAddrs.html#implementors).
+```Rust
+let c = TcpStream::connect("www.jameselford.com:443");
+```
+
+... so `TcpStream::connect` is our jumping-off point. `connect` takes any
+argument with a corresponding `ToSocketAddrs` implementation - and the 
+standard library comes with implementors for [a whole range of sensible types](https://doc.rust-lang.org/std/net/trait.ToSocketAddrs.html#implementors).
 
 [Here's](https://doc.rust-lang.org/src/std/net/addr.rs.html#969-979) the
 implementation for `str`:
 
-```rust
+```Rust
 // accepts strings like 'localhost:12345'
 #[stable(feature = "rust1", since = "1.0.0")]
 impl ToSocketAddrs for str {
@@ -57,17 +73,17 @@ impl ToSocketAddrs for str {
 }
 ```
 
-The initial call to `parse` brings some extra conversion magic into the mix,
+The call to `parse` near the top brings some extra conversion magic into the mix,
 but all that's doing is leaning on [`SocketAddr`'s `FromStr` implementation](https://doc.rust-lang.org/src/std/net/parser.rs.html#318-326),
 which I won't list here, because it's just dealing with the case that the `str`
-is already a straightforward `SocketAddr` (i.e. an IP address and port, in one
-of the normal formats like: `192.168.1.1:80`). That's not our case.
+is already a straightforward `SocketAddr` (e.g. `192.168.1.1:80`). That's not 
+our case.
 
-Let's dig into [`resolve_socket_addr`](https://doc.rust-lang.org/src/std/net/addr.rs.html#936).
+Next comes [`resolve_socket_addr`](https://doc.rust-lang.org/src/std/net/addr.rs.html#936).
 "Resolve" - that's a familiar word from the world of DNS; sounds like it could 
-be what we're looking for.
+be what we're looking for. Let's dig in:
 
-```rust
+```Rust
 fn resolve_socket_addr(lh: LookupHost) -> io::Result<vec::IntoIter<SocketAddr>> {
     let p = lh.port();
     let v: Vec<_> = lh
@@ -80,17 +96,17 @@ fn resolve_socket_addr(lh: LookupHost) -> io::Result<vec::IntoIter<SocketAddr>> 
 }
 ```
 
-Uh... huh... looks like a straightforward transform of the `lh` input argument
+Uh... huh... looks like a simple transform of the `lh` input argument
 into the result. Also, I can't help noticing, this function returns a `Result`
 (which is what we expect! ... we're looking for something that can reach out
 and hit remote DNS servers, over the network after all), but this function is
-infallible; it can only return `Ok(...)` at the end.
+infallible: it can only return `Ok(...)` at the end.
 
 Just one thing: our `str` has become `lh: LookupHost`, and it appears to have all
 the answers. Where did that come from? Let's back up to our `to_socket_addrs`
 function - notice the last line:
 
-```rust
+```Rust
 resolve_socket_addr(self.try_into()?)
 ```
 
@@ -107,29 +123,20 @@ on [doc.rust-lang.org's normally trusty search](https://doc.rust-lang.org/std/in
 So we need to look deeper than what's publicly exposed by the standard
 library, into the implementation details. 
 
-On the one hand that's good news:
-that means we're getting to the heart of it, where the real implementation
-complexity is hidden away so as not to concern application developers in their
-day to day. "Where do hostnames come from?" is exactly the sort of thing most of
-us (I think?) don't want to worry about in our day to day, so we knew we'd have
-to go off the beaten path.
+This is good news: it means we're getting to the heart of it.
+"Where do host names come from?" is exactly the sort of thing that we want
+the standard library to take care of for us, so we knew we'd have to look
+behind the curtain at some point.
 
-On the other hand, this is bad news: it means that anything we learn here is
-likely not promised to us. It might also be a hint that we should expect it to
-work differently across languages - or different platforms using the same
-language. The former implies less transferable knowledge (boo, hiss! there I 
-was hoping that one day I'd finally just understand all of computers!). The 
-latter is more interesting though; it implies that any knowledge we bake in 
-about how this stuff works might have portability implications. We'll see some
-of that later.
+Okay, enough narrative, let's see some code. 
 
-Okay, enough narrative, let's see some code. We'll have to shift over to the
-rust source code now: here's that `LookupHost` type we're after - and more
-importantly, the [`TryFrom` implementation for `str`](https://github.com/rust-lang/rust/blob/master/src/libstd/sys_common/net.rs#L163),
-which splits host `hostname:port` string up and then does another call to
-`try_into`, implemented immediately below as:
+We'll shift over to the Rust sources: [here's](https://github.com/rust-lang/rust/blob/master/src/libstd/sys_common/net.rs#L163)
+the `TryFrom` implementation for `LookupHost` we were after (this allows us to
+use `try_into` to `to_socket_addrs` above). We'll skip over that as it just splits 
+the `str` up into a `(host, port)` pair, and calls `try_into()` again, which is
+defined immediately below in the same file:
 
-```rust
+```Rust
 impl<'a> TryFrom<(&'a str, u16)> for LookupHost {
     type Error = io::Error;
 
@@ -149,47 +156,79 @@ impl<'a> TryFrom<(&'a str, u16)> for LookupHost {
 ```
 
 Ah hah! Unsafe code! With a strong whiff of FFI about it! We're getting to the
-good stuff now.
-(FFI is [foreign function interface](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html?highlight=ffi#using-extern-functions-to-call-external-code). 
-Rust leans on existing C standard libraries to interface with the system - that
-means anything that touches the network, opens files,
-spawns new processes, ... in short - anything that requires making System Calls.
-When languages like Rust call out to libraries written in C, we normally call
-that FFI).
+good stuff now. That call to [`getaddrinfo`](https://linux.die.net/man/3/getaddrinfo))
+is the final step that takes us into the `libc` - which is, ultimately, where 
+the sausage gets made. 
 
-`getaddrinfo` is a familiar function from C standard library, so we're
-getting to the good stuff - `c::getaddrinfo` is defined over in a
-platform-specific module under the `sys` tree of the standard library, 
-[here](https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/net.rs#L17).
-For the "unix" platform, it's just directly imported from `libc`.
+There is one more hop here:
 
-On linux, the most common implementation of `libc` is [`glibc`](https://www.gnu.org/software/libc/), 
-so our question really boils down to:
+```Rust
+c::getaddrinfo(...)
+```
+
+It's natural to read that as "call `getaddrinfo` from a C library", but `c` is
+just a Rust namespace like any other, so this function is being imported from
+somewhere. Scroll up to the top, and you'll see it comes from:
+
+```Rust
+use crate::sys::net::netc as c;
+```
+
+`sys` is where the Rust standard library keeps its platform-specific code, so
+the implementation will depend on the current platform. On _unix_ platforms,
+`sys::net::netc` is [defined as](https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/net.rs#L17) backing on to `libc`:
+
+```Rust
+pub extern crate libc as netc;
+```
+
+... but that needn't be the case everywhere - for example on the [wasi platform](https://github.com/rust-lang/rust/blob/master/src/libstd/sys/wasi/net.rs#L376)
+`netc` is defined as a native Rust module, with no `libc` in sight. 
+
+Okay, that's enough technicalities: for our purposes, this `c::getaddrinfo` is
+a call through to `libc`.
+
+## quick asside on FFI and `libc`
+
+FFI is short for ["foreign function interface"](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html?highlight=ffi#using-extern-functions-to-call-external-code). 
+Rust leans on existing libraries C for a whole bunch of functionality, and in 
+this case, for functionality built into `libc`. When languages call into other
+languages that exist outside their own ecosystem (in this case, Rust to C), 
+that's FFI.
+
+`libc` is a widely-scoped C library that's provided as part of POSIX. It
+handles all sorts of common functionality - hostname resolution is one area,
+but in fact Rust delegates to `libc` for pretty much anything that touches the 
+network, opens files, spawns new processes, ... in short: anything that 
+requires making System Calls. Rust isn't alone in leaning on a `libc` for 
+this; most programming languages eventually call through to `libc` (Python, 
+Ruby, and Java all do, for example). That's good news; from this point on, what
+we learn translates well across languages. Go is a notable exception here - 
+but more on that later.
+
+POSIX only specifies the _interface_ that `libc` has to provide, and
+there are several implementations. On Linux, the most common implementation of
+`libc` is [`glibc`](https://www.gnu.org/software/libc/), so that's what we'll 
+talk about next, but others do exist. Again, more on that later.
+
+## rephrasing the question
+
+Now that we've established that we call through to `libc`'s `getaddrinfo`, and
+that `libc` is commonly implemented by `glibc`, we can rephrase the question as:
 
 > how does `glibc` implement `getaddrinfo`?
 
-A couple of final notes here:
-- Rust isn't alone in leaning on a `libc` for this - most programming languages 
-  eventually call through to libc (Python, Ruby, Java all do, for example) for
-  the real business of interacting with the machine. That's good news; you can 
-  scratch what I said earlier about this not being transferable knowledge. Go 
-  is a notable exception here - but more on that later.
-
-- [man getaddrinfo](https://linux.die.net/man/3/getaddrinfo) 
-  tells us that `getaddrinfo` is specified by POSIX - so we'd expect to find it
-  in other `libc` implementations, like [`musl`](https://musl.libc.org/).
-
+Before we dig into that, let's take stock. We've arrived at the conclusion that
+we call through to the commonly used `libc`. We've said that pretty much every
+language does the same thing. That means that the answers we're looking for 
+will be applicable pretty much everywhere, including in C programs. There's
+going to be some prior art on this.
 
 ## what does the internet say?
 
-Okay, so we've arrived at the conclusion that we call through to the commonly
-used `libc`. That means that the answers we're looking for will apply to pretty
-much every major programming language, including C. Before we dig into exactly
-what `glibc` does, let's step back and survey the problem area.
-
 What do we know already about how our programs find hosts?
 - _Eventually_ we know that we'll connect to a DNS server and make a request
-- We know that at some stage the `hosts` file comes into it
+- We probably know that at some stage the `hosts` file comes into it
 - We know that DNS configuration is system-wide. When we connect to a network,
   our computers automatically figure out what DNS to use (or we configure it
   ourselves).
@@ -206,15 +245,16 @@ Let's start with the global configuration of DNS servers. If we search for
 - The [Arch Wiki entry on domain name resolution](https://wiki.archlinux.org/index.php/Domain_name_resolution#Overwriting_of_/etc/resolv.conf)
   tells us that `resolv.conf` is generally overwritten by network managers like
   GNOME's aptly-named [NetworkManager](https://wiki.gnome.org/Projects/NetworkManager).
-  That's re-assuring as it joins the dots from the familiar DNS configuration 
-  options we get when we connect to a network, to somethign that `libc` and
-  friends can find.
+  That's re-assuring, as it joins the dots from the familiar configuration 
+  options we get when we go to our environment's Network Settings screen, to 
+  something that `libc` and friends can find.
 - The same page also tells us that `glibc`'s implementation of `getaddrinfo` is
   backed by [`NSS`](https://en.wikipedia.org/wiki/Name_Service_Switch), which
-  reads from [nsswitch.conf](https://man7.org/linux/man-pages/man5/nsswitch.conf.5.html).
+  reads from [nsswitch.conf](https://man7.org/linux/man-pages/man5/nsswitch.conf.5.html). Hopefully we'll be able to see where that happens.
 
 Let's have a look in those files and see what we can see. Here's the contents
 of my `resolv.conf`:
+
 ```
 j@.. ~/s/dns-experiment> cat /etc/resolv.conf 
 # Generated by NetworkManager
@@ -222,13 +262,14 @@ nameserver 192.168.1.2
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 ```
+
 It checks out:
 - `192.168.1.2` is the address of my local DNS resolver (a [pihole](https://pi-hole.net/),
   if you're interested)
 - `8.8.8.8` and `8.8.4.4` are Google's public DNS, which I have configured as
   my fallback DNS. 
 - The file mentions that it's generated by `NetworkManager`, which tallies up
-  with what we found above.
+  with what we saw above.
 
 And here's the relevant section of my local `nsswitch.conf` (used by `glibc`):
 ```
@@ -266,23 +307,24 @@ The `hosts` line is read in order.
   a system used for host discover on local networks. This is what allows us to 
   resolve `.local` hostnames.
 - `dns` gets a shout out as explicitly allowed in the docs, but I notice the
-  presence of `libnss_dns.so.2` in my `/lib64` directory. I guess we'll see how
+  presence of `libnss_dns.so.2` in my `/lib64` directory. Now that I look,
+  there's a `libnss_files.so.2` in there too. I guess we'll see how
   that fits together when we dig into `glibc`.
 - `myhostname` is a `systemd` module ([docs](https://www.freedesktop.org/software/systemd/man/libnss_myhostname.so.2.html))
   that will resolve the local system's hostname.
 
-Something that tripped me up: the `[NOTFOUND=return]` action.
-It says that if `mdns4_minimal` returns `NOTFOUND`, then we can stop and not
+Something that tripped me up: `[NOTFOUND=return]`.
+It says that if `mdns4_minimal` returns `NOTFOUND`, then we can stop early and not
 bother with querying `dns` or `myhostname`. My question was: since 
 `mdns4_minimal` is only going to be able to find `.local` hosts, doesn't this
 action prevent us from moving on to use real `dns` for everything else? In fact
-`NOTFOUND` is only returned if `mdns4_minimal` both can't resolve the name,
-_and_ believes itself responsible for looking up the name. Otherwise,
+`NOTFOUND` is only returned if `mdns4_minimal` both believes itself responsible for 
+looking up the name _and_ then fails to do so. Otherwise,
 `mdns4_minimal` [will return](https://github.com/lathiat/nss-mdns/blob/master/src/nss.c#L130)
 an `UNAVAIL` status, and resolution will continue.
 
 That gives us a clearer picture of what we're expecting to find `glibc`. Let's
-proceed.
+finally proceed.
 
 ## what does `glibc` do?
 
@@ -297,9 +339,9 @@ you're welcome to pick through, but it delegates the real work of lookup to
 another function, `gaih_inet` ([further up](https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/posix/getaddrinfo.c;h=ed04e564f9711298fd7bb14fd53f13c8053694d2;hb=HEAD#l327)
 in the same file). That function's just shy of 800 lines, and we're along 
 the right lines, since references to some of the concepts we were looking 
-at above are creeping in now if we scan through:
+at above are creeping in now:
 - a reference to `/etc/nsswitch.conf` in the comments
-- calls out to functions with `nss` in the name, like `__nss_database_lookup2`
+- calls through to functions with `nss` in the name, like `__nss_database_lookup2`
   and `__nss_lookup_function`. 
   
 Notice that `__nss_lookup_function` takes the name of another function as an
@@ -315,7 +357,7 @@ of housekeeping.
 
 Time for a change of tack.
 
-### strace to the rescue
+### `strace` to the rescue
 
 There is another way we can get to the bottom of what's going on inside the
 loveable but inscrutable yak that is `glibc`: `strace`. If you haven't seen
@@ -385,8 +427,7 @@ Let's start at the top:
 139893 close(3)                         = 0
 ```
 
-That's a dynamic library being loaded - `libdl`, which will be used for
-loading other dynamic libraries. 
+I did mention that it was going to be dense.
 
 A note on how to read this: 
 - the first word is the name of the systemcall. 
@@ -397,11 +438,13 @@ A note on how to read this:
 corresponding names like you'd find the in C header files, and even gives us
 the text description for errors. Helpful, right?
 
-So, what's happening in this snippet is that the shared lib is opened,
-read, mapped into memory (notice `PROT_EXEC` - which maps the libraries into
-_executable_ memory, which is what we need if we're going to run code from them!),
-then closed. This is the first of many shared libs that get loaded at the start
-of the process - I'll omit the housekeeping for the rest:
+So, what's happening in this snippet is that a shared library (`libdl` 
+in this case) is opened, read, mapped into memory (notice `PROT_EXEC` - 
+which maps the libraries into _executable_ memory, which is what we need if 
+we're going to run code from them!), then closed. This is the first of many 
+shared libs that get loaded at the start of the process. The whole process is
+easy to recognize in the trace once you know what's going on, so, but I'll
+spare you the housekeeping for the rest:
 
 ```
 139893 openat(AT_FDCWD, "/lib64/libpthread.so.0", O_RDONLY|O_CLOEXEC) = 3
@@ -409,6 +452,9 @@ of the process - I'll omit the housekeeping for the rest:
 139893 openat(AT_FDCWD, "/lib64/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
 ```
 
+At this point we've got the following libraries loaded:
+
+- `libdl`: will be used later for dynamically loading more shared libraries.
 - `libpthread`: threading support. 
 - `libgcc`: GCC runtime support. Rust doesn't compile with GCC, but `glibc`
   does, so our executable must load `libgcc`. Even C has _some_ runtime.
@@ -435,13 +481,19 @@ compatibility). I'd love to hear about it if you know differently.
 139893 read(3, "# Generated by authselect on Thu"..., 4096) = 2556
 ```
 
-Okay, so this is the first of the config files we mentioned earlier. Looks like
-`glibc` looks here first, to decide what it'll do next. This ties up with what
-we're expecting; so far so good. We can see the `read` call getting the
-familiar "generated by authselect..." header that we found earlier.
+Okay, so this is loading `nsswitch.conf`, the first of the config files we 
+mentioned earlier. Looks like `glibc` looks at that first, to decide what 
+it'll do next. This ties up with what we're expecting; so far so good. We can 
+see the `read` call getting the familiar "generated by authselect..." header 
+that we saw before.
 
-Where does it go from there? Well, we're expecting it to consult the `files`
-source first:
+Where does it go from there? As a quick reminder, `nsswitch.conf` listed:
+
+```
+hosts:      files mdns4_minimal [NOTFOUND=return] dns myhostname
+```
+
+So, we're expecting it to consult the `files` source first. Back to the trace:
 
 ```
 139893 openat(AT_FDCWD, "/etc/host.conf", O_RDONLY|O_CLOEXEC) = 3
@@ -457,7 +509,8 @@ multi on
 
 [`man host.conf`](https://www.man7.org/linux/man-pages/man5/host.conf.5.html)
 tells us that this line tells the resolver value some details of how to
-interpret `/etc/hosts`. Okay. So we'll expecting to see that soon maybe...
+interpret `/etc/hosts`. Okay. So we're still expecting to `openat("/etc/hosts")` 
+soon...
 
 ```
 139893 openat(AT_FDCWD, "/etc/resolv.conf", O_RDONLY|O_CLOEXEC) = 3
@@ -609,7 +662,7 @@ included in the return value of `getaddrinfo`, but it looks like it _is_ used
 as part of determining the order of results. 
 
 Okay, _finally_ we can print out the results that we saw at the top of the 
-section - there `write` calls to file descriptor `1` (which is stdout):
+section - a series of`write` calls on file descriptor `1` (which is stdout):
 
 ```
 139893 write(1, "ipv4 185.199.108.153: jelford.gi"..., 40) = 40
@@ -629,28 +682,30 @@ Let's wrap up what we've seen so far:
 - Assuming that `libc` is `glibc`, it then:
   - checks for `nscd`, a caching daemon that doesn't seem to exist on my host
   - reads `nsswitch.conf` to determine what to do next. Based on that it...
-  - Checks in `host.conf` and `resolv.conf` to determine how to interpret what 
+  - checks in `host.conf` and `resolv.conf` to determine how to interpret what 
     it finds when it...
-  - Reads the `hosts` file (in case of statically configured naming info)
-  - Tries `mdns4_minimal` (in case of `.local` domains)
-  - Queries DNS (using the DNS server it found earlier in `resolv.conf`)
-  - Sorts the results according RFC-3484, using information about local
-    interfaces
-  - Finally returns a list of host lookup results
+  - reads the `hosts` file (in case of statically configured naming info),
+  - tries `mdns4_minimal` (in case of `.local` domains),
+  - queries DNS (using the DNS server it found earlier in `resolv.conf`),
+  - sorts the results according RFC-3484, using information about local
+    interfaces, and...
+  - finally returns a list of host lookup results
 
 That gives us a pretty clear picture of where to look if we want to configure
 or understand how hostname lookup is working on our system:
-- `nsswitch.conf` is used to determine how to look names up
-- `resolv.conf` lists our name servers
-- `glibc` will do DNS lookup based on the configured name servers, unless it
-  gets something from the `hosts` file or a `.local` domain.
-- Modify these files using `authselect` or `NetworkManager` respectively.
+- `/etc/nsswitch.conf` is used to determine how to look up hosts (maintained by
+  `authselect`)
+- `/etc/hosts` allows us to configure a static set of names
+- `.local` domains have their own special `mdns4` thing going on,
+- and finally, `/etc/resolv.conf` lists our name servers 
+  (maintained by `NetworkManager`)
 
-This feels like a good place to stop, so... let's just look at one more thing...
+Simple. This feels like a good place to stop, so... let's just look at one more
+thing...
 
-## what if we're not using glibc?
+## what if we're not using `glibc`?
 
-Now... `getaddrinfo` is specified by POSIX, but the rest of the details are not;
+Now... `getaddrinfo` is specified by POSIX, but the rest of the details are not.
 `nss` is a `glibc` (well... inspired by Sun) invention, so everything from that
 point on is implementation dependant.
 
@@ -658,13 +713,13 @@ This matters when:
 - We're not using `glibc` as our `libc`.
   - Other 'nixes, like BSD, come with their own `libc`'s. 
   - The normal alternative on _linux_ is `musl`,  which, apart from being the
-    default choice when producing static binaries in rust, is the system-wide
+    default choice when producing static binaries in Rust, is the system-wide
     `libc` for some Linux distributions - in particular [alpine](https://www.alpinelinux.org/),
     a popular choice for container base images.
 - We're not even using `libc`. Go makes its syscalls directly (well, on some
   platforms - including Linux), so `getaddrinfo` never even comes into it.
 
-Let's round this out with a quick look an `strace` generated by the same rust
+Let's round this out with a quick look an `strace` generated by the same Rust
 program as above, but this time targetting `musl`:
 
 ```bash
@@ -729,6 +784,14 @@ one way would be to introduce a delay on my local resolver's responses...
 
 Something for another post perhaps.
 
+## just one more thing...
+
+Oh hey, `go` does its own thing! I mentioned before that it doesn't use `libc`
+for its system calls. But what about using `getaddrinfo`, and the whole `nss`
+thing? Well it turns out to depend! 
+
+The [`net` package documentation](https://golang.org/pkg/net/#pkg-overview) 
+has some detail on this.
 
 ## copyright
 
