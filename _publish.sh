@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-cobalt build
+cobalt build --drafts
 
 build_dir="$(pwd)/_site"
 tmp_dir=$(mktemp -d)

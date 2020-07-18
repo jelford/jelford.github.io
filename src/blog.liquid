@@ -24,6 +24,7 @@
   <main>
     <ul class="post-list" itemscope itemtype="http://schema.org/ItemList">
     {% for post in collections.posts.pages %}
+      {% if post.is_draft %}{% continue %}{% endif %}
       <li itemprop="itemListElement" itemscope itemtype="https://schema.org/BlogPosting">
         <a href="{{post.permalink}}">{{post.title}}</a>
         <div class="post-excerpt">{{post.excerpt}}</p>

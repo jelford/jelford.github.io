@@ -10,3 +10,5 @@ site:
   base_url: https://jameselford.com
 posts:
   rss: rss.xml
+  drafts_dir: drafts
+include_drafts: true

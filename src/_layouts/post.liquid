@@ -10,12 +10,21 @@
     <article itemscope itemtype="http://schema.org/BlogPosting">
         <header>
         <h2 itemprop="name">{{page.title}}</h2>
-        <p class="post-meta-info">
-            Published on 
-            <time itemprop="datePublished" datetime="{{ page.published_date | date: '%Y-%m-%d' }}">{{ page.published_date | date: '%Y-%m-%d' }}</time>. 
-            <a href="{{ page.permalink }}">(permalink)</a>
-        </p>
+        {% if page.published_date %}
+            <p class="post-meta-info">
+                Published on 
+                <time itemprop="datePublished" datetime="{{ page.published_date | date: '%Y-%m-%d' }}">{{ page.published_date | date: '%Y-%m-%d' }}</time>. 
+                <a href="{{ page.permalink }}">(permalink)</a>
+            </p>
+        {% endif %}
         </header>
+        {% if page.is_draft %}
+            <p class="draft-notice">
+                🚧 Hey there! You seem to have stumbled on a draft post! You're welcome to have a look around,
+                but I'm still working on it, so it's likely that things are going to be rough around the
+                edges. That's okay with me if it's okay with you.
+            </p>
+        {% endif %}
         <main itemprop="articleBody">
         {{ page.content }}
         </main>
