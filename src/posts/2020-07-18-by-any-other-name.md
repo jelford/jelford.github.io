@@ -157,7 +157,7 @@ impl<'a> TryFrom<(&'a str, u16)> for LookupHost {
 ```
 
 Ah hah! Unsafe code! With a strong whiff of FFI about it! We're getting to the
-good stuff now. That call to [`getaddrinfo`](https://linux.die.net/man/3/getaddrinfo))
+good stuff now. That call to [`getaddrinfo`](https://linux.die.net/man/3/getaddrinfo)
 is the final step that takes us into the `libc` - which is, ultimately, where 
 the sausage gets made. 
 
@@ -283,7 +283,7 @@ hosts:      files mdns4_minimal [NOTFOUND=return] dns myhostname
 ```
 
 `authselect` is something new - looks like on my Fedora system there's one more
-layer of machinary involved in generating this file, but let's not worry about
+layer of machinery involved in generating this file, but let's not worry about
 that for now. 
 
 The interesting part is what it has to say about host resolution: it mentions
