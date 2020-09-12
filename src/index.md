@@ -31,6 +31,7 @@ Some things I've tried to help out with:
   Application sandboxing on linux with namespaces, seccomp, and capabilities
 * [networkzero](https://github.com/tjguk/networkzero/pulls?q=is%3Apr+is%3Amerged+author%3Ajelford+)
   Easy networking for in Python for educational settings
+* [Fedora package](https://src.fedoraproject.org/rpms/brightnessctl) for [brightnessctl](https://github.com/Hummer12007/brightnessctl)
 
 A few projects of my own...
 * [activesoup](https://github.com/jelford/activesoup)
@@ -47,6 +48,5 @@ A few projects of my own...
   Automatic backups and queryable history while you work
 * [ferret](https://github.com/jelford/ferret)
   Custom shebang for simpler python scripts that need more than the standard library
-
-
+)
 
