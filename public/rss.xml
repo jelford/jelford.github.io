@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+    <channel>
+        <title></title>
+        <link>https://www.jameselford.com</link>
+        <description></description>
+        <generator>Zola</generator>
+        <language>en</language>
+        <atom:link href="https://www.jameselford.com/rss.xml" rel="self" type="application/rss+xml"/>
+        <lastBuildDate>Sat, 18 Jul 2020 17:51:27 +0000</lastBuildDate>
+        <item>
+            <title>altogether too much detail about host name resolution</title>
+            <pubDate>Sat, 18 Jul 2020 17:51:27 +0000</pubDate>
+            <link>https://www.jameselford.com/blog/by-any-other-name/</link>
+            <guid>https://www.jameselford.com/blog/by-any-other-name/</guid>
+            <description>&lt;p&gt;In this post we&#x27;ll take a look under the covers at what happens we look up hosts.&lt;&#x2F;p&gt;
+</description>
+        </item>
+        <item>
+            <title>Longevity in software engineering</title>
+            <pubDate>Sun, 14 Jun 2020 15:32:36 +0000</pubDate>
+            <link>https://www.jameselford.com/blog/lindy-effect-in-software/</link>
+            <guid>https://www.jameselford.com/blog/lindy-effect-in-software/</guid>
+            <description>&lt;p&gt;How long should we expect themes and technologies in software engineering to last?
+In this post, we&#x27;ll look at how long individual projects &amp;quot;last&amp;quot; based on data from GitHub
+and try to draw conclusions around what that means for choosing foundational software.&lt;&#x2F;p&gt;
+</description>
+        </item>
+    </channel>
+</rss>

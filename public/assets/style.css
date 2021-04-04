@@ -1,0 +1,50 @@
+
+
+body {
+    font-family: sans-serif;
+    margin: 1rem auto;
+    padding: 1rem;
+	max-width: 55rem;
+    line-height: 1.5rem;
+    font-size: 1.1rem;
+}
+
+img {
+	max-width: 100%;
+}
+
+.post-meta-info {
+    color: grey;
+    font-size: 0.8em;
+}
+
+.breadcrumbs {
+    font-family: monospace;
+    color: grey;
+}
+
+.breadcrumbs a:link {
+    color: grey;
+}
+
+.breadcrumbs a:visited {
+    color: grey;
+}
+
+pre {
+    padding: 0.7em;
+    overflow-x: scroll;
+}
+
+blockquote {
+    background-color: #EEEEEE;
+    padding: 0.5rem 2rem;
+    margin: 0;
+    font-style: italic;
+}
+
+.draft-notice {
+    background-color: #e0e0e0;
+    padding: 1em;
+    border-radius: 15px;
+}

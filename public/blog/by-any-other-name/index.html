@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <link rel="stylesheet" type="text/css" href="/assets/style.css">
+    
+    </head>
+    <body>
+    <div>
+	      
+    <header>
+        <h1 class="breadcrumbs"><a href="/">~jelford</a> / <a href="/blog/">blog:</a></h1>
+    </header>
+  
+    <article itemscope itemtype="http://schema.org/BlogPosting">
+        <header>
+        <h2 itemprop="name">altogether too much detail about host name resolution</h2>
+            <p class="post-meta-info">
+                Published on 
+                <time itemprop="datePublished" datetime="2020-07-18T17:51:27+00:00">2020-07-18</time>. 
+                <a href="https:&#x2F;&#x2F;www.jameselford.com&#x2F;blog&#x2F;by-any-other-name&#x2F;">(permalink)</a>
+            </p>
+        </header>
+        
+        <main itemprop="articleBody">
+        <p>In this post we'll take a look under the covers at what happens we look up hosts.</p>
+<span id="continue-reading"></span>
+<p>If you're here, you'll have an idea that the answer is basically &quot;DNS&quot; - but 
+that's not the whole story. Let's make things concrete; we're going to answer 
+the question: how does the following snippet of (pseudo-)code figure out what 
+host to connect to?</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">conn = socket::</span><span style="color:#bf616a;">connect</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">www.jameselford.com</span><span style="color:#c0c5ce;">&quot;, </span><span style="color:#d08770;">443</span><span style="color:#c0c5ce;">);
+</span></code></pre>
+<p>DNS is just one part of the answer.</p>
+<h2 id="tl-dr">tl;dr</h2>
+<p><em>Most</em> programs on a normal linux system will look in <code>/etc/nsswitch.conf</code> to
+figure out how to resolve hostnames. But lots of programs won't. Pretty
+much everything will find your DNS servers in <code>/etc/resolv.conf</code>. Generally,
+this process will involve a call to <code>getaddrinfo</code>, provided by your system's 
+standard C library.</p>
+<p>If that's what you came to find out, then you can go back to the internet now;
+thanks for your time. Stick around if you want to get into altogether too much
+detail about how this all happens.</p>
+<h2 id="what-s-coming-up">what's coming up</h2>
+<p>We'll see:</p>
+<ul>
+<li>How our program ends up calling into <code>libc</code> (by diving into the source)</li>
+<li>How <code>libc</code> resolves our hostname (with a little help from <code>strace</code>)</li>
+<li>and along the way, some opportunities to tweak how our system does host lookup</li>
+</ul>
+<p>We'll start in Rust land, because that's kind of my jam, but
+you could do a similar journey for any high-level programming language. Maybe
+you hate jam. Maybe you're more of a Python / marmalade / Ruby sort of person.
+That's fine too; ultimately it doesn't matter how you do it, so long as there's
+a thick layer of sugar on your breakfast. In C, you'd just skip the first step 
+and go straight to <code>libc</code>. I guess in this analogy, C is the toast.</p>
+<h2 id="check-the-source-peeking-into-the-rust-standard-library">check the source - peeking into the (Rust) standard library</h2>
+<p>In Rust, the pseudo-code above looks like this:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">let</span><span style="color:#c0c5ce;"> c = TcpStream::connect(&quot;</span><span style="color:#a3be8c;">www.jameselford.com:443</span><span style="color:#c0c5ce;">&quot;);
+</span></code></pre>
+<p>... so <code>TcpStream::connect</code> is our jumping-off point. <code>connect</code> takes any
+argument with a corresponding <code>ToSocketAddrs</code> implementation - and the 
+standard library comes with implementors for <a href="https://doc.rust-lang.org/std/net/trait.ToSocketAddrs.html#implementors">a whole range of sensible types</a>.</p>
+<p><a href="https://doc.rust-lang.org/src/std/net/addr.rs.html#969-979">Here's</a> the
+implementation for <code>str</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#65737e;">// accepts strings like &#39;localhost:12345&#39;
+</span><span style="color:#c0c5ce;">#[</span><span style="color:#bf616a;">stable</span><span style="color:#c0c5ce;">(feature = &quot;</span><span style="color:#a3be8c;">rust1</span><span style="color:#c0c5ce;">&quot;, since = &quot;</span><span style="color:#a3be8c;">1.0.0</span><span style="color:#c0c5ce;">&quot;)]
+</span><span style="color:#b48ead;">impl </span><span style="color:#c0c5ce;">ToSocketAddrs </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">str {
+    </span><span style="color:#b48ead;">type </span><span style="color:#c0c5ce;">Iter = vec::IntoIter&lt;SocketAddr&gt;;
+    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">to_socket_addrs</span><span style="color:#c0c5ce;">(&amp;</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; io::Result&lt;vec::IntoIter&lt;SocketAddr&gt;&gt; {
+        </span><span style="color:#65737e;">// try to parse as a regular SocketAddr first
+        </span><span style="color:#b48ead;">if let </span><span style="color:#c0c5ce;">Ok(addr) = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#96b5b4;">parse</span><span style="color:#c0c5ce;">() {
+            </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">Ok(vec![addr].</span><span style="color:#96b5b4;">into_iter</span><span style="color:#c0c5ce;">());
+        }
+
+        </span><span style="color:#96b5b4;">resolve_socket_addr</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#96b5b4;">try_into</span><span style="color:#c0c5ce;">()?)
+    }
+}
+</span></code></pre>
+<p>The call to <code>parse</code> near the top brings some extra conversion magic into the mix,
+but all that's doing is leaning on <a href="https://doc.rust-lang.org/src/std/net/parser.rs.html#318-326"><code>SocketAddr</code>'s <code>FromStr</code> implementation</a>,
+which I won't list here, because it's just dealing with the case that the <code>str</code>
+is already a straightforward <code>SocketAddr</code> (e.g. <code>192.168.1.1:80</code>). That's not 
+our case.</p>
+<p>Next comes <a href="https://doc.rust-lang.org/src/std/net/addr.rs.html#936"><code>resolve_socket_addr</code></a>.
+&quot;Resolve&quot; - that's a familiar word from the world of DNS; sounds like it could 
+be what we're looking for. Let's dig in:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">resolve_socket_addr</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">lh</span><span style="color:#c0c5ce;">: LookupHost) -&gt; io::Result&lt;vec::IntoIter&lt;SocketAddr&gt;&gt; {
+    </span><span style="color:#b48ead;">let</span><span style="color:#c0c5ce;"> p = lh.</span><span style="color:#96b5b4;">port</span><span style="color:#c0c5ce;">();
+    </span><span style="color:#b48ead;">let</span><span style="color:#c0c5ce;"> v: Vec&lt;_&gt; = lh
+        .</span><span style="color:#96b5b4;">map</span><span style="color:#c0c5ce;">(|</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">a</span><span style="color:#c0c5ce;">| {
+            a.</span><span style="color:#96b5b4;">set_port</span><span style="color:#c0c5ce;">(p);
+            a
+        })
+        .</span><span style="color:#96b5b4;">collect</span><span style="color:#c0c5ce;">();
+    Ok(v.</span><span style="color:#96b5b4;">into_iter</span><span style="color:#c0c5ce;">())
+}
+</span></code></pre>
+<p>Uh... huh... looks like a simple transform of the <code>lh</code> input argument
+into the result. Also, I can't help noticing, this function returns a <code>Result</code>
+(which is what we expect! ... we're looking for something that can reach out
+and hit remote DNS servers, over the network after all), but this function is
+infallible: it can only return <code>Ok(...)</code> at the end.</p>
+<p>Just one thing: our <code>str</code> has become <code>lh: LookupHost</code>, and it appears to have all
+the answers. Where did that come from? Let's back up to our <code>to_socket_addrs</code>
+function - notice the last line:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#96b5b4;">resolve_socket_addr</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#96b5b4;">try_into</span><span style="color:#c0c5ce;">()?)
+</span></code></pre>
+<p>That <code>try_into</code> is where the magic's happening. The name <code>try_...</code> and the 
+<code>Result</code> return type (indicated by the <code>?</code>) are good hints that <em>something's</em>
+going on here. On first pass, I assumed it was &quot;just&quot; a straightforward
+conversion into another more convenient type for the lookup, but in fact,
+<code>try_into</code> <em>is</em> the lookup, as we'll see. Let's skip over to the
+implementation... but... how exactly do we find that? No mention of <code>LookupHost</code>
+on <a href="https://doc.rust-lang.org/std/index.html?search=lookuphost">doc.rust-lang.org's normally trusty search</a>.</p>
+<h2 id="further-into-the-source-standard-library-internals">further into the source - standard library internals</h2>
+<p>So we need to look deeper than what's publicly exposed by the standard
+library, into the implementation details. </p>
+<p>This is good news: it means we're getting to the heart of it.
+&quot;Where do host names come from?&quot; is exactly the sort of thing that we want
+the standard library to take care of for us, so we knew we'd have to look
+behind the curtain at some point.</p>
+<p>Okay, enough narrative, let's see some code. </p>
+<p>We'll shift over to the Rust sources: <a href="https://github.com/rust-lang/rust/blob/master/src/libstd/sys_common/net.rs#L163">here's</a>
+the <code>TryFrom</code> implementation for <code>LookupHost</code> we were after (this allows us to
+use <code>try_into</code> to <code>to_socket_addrs</code> above). We'll skip over that as it just splits 
+the <code>str</code> up into a <code>(host, port)</code> pair, and calls <code>try_into()</code> again, which is
+defined immediately below in the same file:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">impl</span><span style="color:#c0c5ce;">&lt;</span><span style="color:#b48ead;">&#39;a</span><span style="color:#c0c5ce;">&gt; TryFrom&lt;(&amp;</span><span style="color:#b48ead;">&#39;a str</span><span style="color:#c0c5ce;">, </span><span style="color:#b48ead;">u16</span><span style="color:#c0c5ce;">)&gt; </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">LookupHost {
+    </span><span style="color:#b48ead;">type </span><span style="color:#c0c5ce;">Error = io::Error;
+
+    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">try_from</span><span style="color:#c0c5ce;">((</span><span style="color:#bf616a;">host</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">port</span><span style="color:#c0c5ce;">): (&amp;</span><span style="color:#b48ead;">&#39;a str</span><span style="color:#c0c5ce;">, </span><span style="color:#b48ead;">u16</span><span style="color:#c0c5ce;">)) -&gt; io::Result&lt;LookupHost&gt; {
+        </span><span style="color:#96b5b4;">init</span><span style="color:#c0c5ce;">();
+
+        </span><span style="color:#b48ead;">let c_host </span><span style="color:#c0c5ce;">= CString::new(host)?;
+        </span><span style="color:#b48ead;">let mut</span><span style="color:#c0c5ce;"> hints: c::addrinfo = </span><span style="color:#b48ead;">unsafe </span><span style="color:#c0c5ce;">{ mem::zeroed() };
+        hints.ai_socktype = c::</span><span style="color:#d08770;">SOCK_STREAM</span><span style="color:#c0c5ce;">;
+        </span><span style="color:#b48ead;">let mut</span><span style="color:#c0c5ce;"> res = ptr::null_mut();
+        </span><span style="color:#b48ead;">unsafe </span><span style="color:#c0c5ce;">{
+            </span><span style="color:#96b5b4;">cvt_gai</span><span style="color:#c0c5ce;">(c::getaddrinfo(</span><span style="color:#b48ead;">c_host</span><span style="color:#c0c5ce;">.</span><span style="color:#96b5b4;">as_ptr</span><span style="color:#c0c5ce;">(), ptr::null(), &amp;hints, &amp;</span><span style="color:#b48ead;">mut</span><span style="color:#c0c5ce;"> res))
+                .</span><span style="color:#96b5b4;">map</span><span style="color:#c0c5ce;">(|_| LookupHost { original: res, cur: res, port })
+        }
+    }
+}
+</span></code></pre>
+<p>Ah hah! Unsafe code! With a strong whiff of FFI about it! We're getting to the
+good stuff now. That call to <a href="https://linux.die.net/man/3/getaddrinfo"><code>getaddrinfo</code></a>
+is the final step that takes us into the <code>libc</code> - which is, ultimately, where 
+the sausage gets made. </p>
+<p>There is one more hop here:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">c::getaddrinfo(...)
+</span></code></pre>
+<p>It's natural to read that as &quot;call <code>getaddrinfo</code> from a C library&quot;, but <code>c</code> is
+just a Rust namespace like any other, so this function is being imported from
+somewhere. Scroll up to the top, and you'll see it comes from:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">use crate</span><span style="color:#c0c5ce;">::sys::net::netc as c;
+</span></code></pre>
+<p><code>sys</code> is where the Rust standard library keeps its platform-specific code, so
+the implementation will depend on the current platform. On <em>unix</em> platforms,
+<code>sys::net::netc</code> is <a href="https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/net.rs#L17">defined as</a> backing on to <code>libc</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">pub extern crate</span><span style="color:#c0c5ce;"> libc as netc;
+</span></code></pre>
+<p>... but that needn't be the case everywhere - for example on the <a href="https://github.com/rust-lang/rust/blob/master/src/libstd/sys/wasi/net.rs#L376">wasi platform</a>
+<code>netc</code> is defined as a native Rust module, with no <code>libc</code> in sight. </p>
+<p>Okay, that's enough technicalities: for our purposes, this <code>c::getaddrinfo</code> is
+a call through to <code>libc</code>.</p>
+<h2 id="quick-asside-on-ffi-and-libc">quick asside on FFI and <code>libc</code></h2>
+<p>FFI is short for <a href="https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html?highlight=ffi#using-extern-functions-to-call-external-code">&quot;foreign function interface&quot;</a>. 
+Rust leans on existing libraries C for a whole bunch of functionality, and in 
+this case, for functionality built into <code>libc</code>. When languages call into other
+languages that exist outside their own ecosystem (in this case, Rust to C), 
+that's FFI.</p>
+<p><code>libc</code> is a widely-scoped C library that's provided as part of POSIX. It
+handles all sorts of common functionality - hostname resolution is one area,
+but in fact Rust delegates to <code>libc</code> for pretty much anything that touches the 
+network, opens files, spawns new processes, ... in short: anything that 
+requires making System Calls. Rust isn't alone in leaning on a <code>libc</code> for 
+this; most programming languages eventually call through to <code>libc</code> (Python, 
+Ruby, and Java all do, for example). That's good news; from this point on, what
+we learn translates well across languages. Go is a notable exception here - 
+but more on that later.</p>
+<p>POSIX only specifies the <em>interface</em> that <code>libc</code> has to provide, and
+there are several implementations. On Linux, the most common implementation of
+<code>libc</code> is <a href="https://www.gnu.org/software/libc/"><code>glibc</code></a>, so that's what we'll 
+talk about next, but others do exist. Again, more on that later.</p>
+<h2 id="rephrasing-the-question">rephrasing the question</h2>
+<p>Now that we've established that we call through to <code>libc</code>'s <code>getaddrinfo</code>, and
+that <code>libc</code> is commonly implemented by <code>glibc</code>, we can rephrase the question as:</p>
+<blockquote>
+<p>how does <code>glibc</code> implement <code>getaddrinfo</code>?</p>
+</blockquote>
+<p>Before we dig into that, let's take stock. We've arrived at the conclusion that
+we call through to the commonly used <code>libc</code>. We've said that pretty much every
+language does the same thing. That means that the answers we're looking for 
+will be applicable pretty much everywhere, including in C programs. There's
+going to be some prior art on this.</p>
+<h2 id="what-does-the-internet-say">what does the internet say?</h2>
+<p>What do we know already about how our programs find hosts?</p>
+<ul>
+<li><em>Eventually</em> we know that we'll connect to a DNS server and make a request</li>
+<li>We probably know that at some stage the <code>hosts</code> file comes into it</li>
+<li>We know that DNS configuration is system-wide. When we connect to a network,
+our computers automatically figure out what DNS to use (or we configure it
+ourselves).</li>
+<li>Maybe some caching?!</li>
+<li><code>localhost</code> is always the loopback interface - presumably we don't ask the
+DNS servers for that?</li>
+<li>There's something special about the <code>.local</code> domain?</li>
+</ul>
+<p>Let's start with the global configuration of DNS servers. If we search for
+&quot;dns linux&quot; we get a few interesting hits:</p>
+<ul>
+<li>There's <a href="https://support.rackspace.com/how-to/changing-dns-settings-on-linux/">this article</a>
+pointing us to <a href="https://www.man7.org/linux/man-pages/man5/resolv.conf.5.html">resolv.conf</a>,
+which contains DNS configuration.</li>
+<li>The <a href="https://wiki.archlinux.org/index.php/Domain_name_resolution#Overwriting_of_/etc/resolv.conf">Arch Wiki entry on domain name resolution</a>
+tells us that <code>resolv.conf</code> is generally overwritten by network managers like
+GNOME's aptly-named <a href="https://wiki.gnome.org/Projects/NetworkManager">NetworkManager</a>.
+That's re-assuring, as it joins the dots from the familiar configuration 
+options we get when we go to our environment's Network Settings screen, to 
+something that <code>libc</code> and friends can find.</li>
+<li>The same page also tells us that <code>glibc</code>'s implementation of <code>getaddrinfo</code> is
+backed by <a href="https://en.wikipedia.org/wiki/Name_Service_Switch"><code>NSS</code></a>, which
+reads from <a href="https://man7.org/linux/man-pages/man5/nsswitch.conf.5.html">nsswitch.conf</a>. Hopefully we'll be able to see where that happens.</li>
+</ul>
+<p>Let's have a look in those files and see what we can see. Here's the contents
+of my <code>resolv.conf</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">j@.. ~/s/dns-experiment&gt; cat /etc/resolv.conf 
+# Generated by NetworkManager
+nameserver 192.168.1.2
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+</span></code></pre>
+<p>It checks out:</p>
+<ul>
+<li><code>192.168.1.2</code> is the address of my local DNS resolver (a <a href="https://pi-hole.net/">pihole</a>,
+if you're interested)</li>
+<li><code>8.8.8.8</code> and <code>8.8.4.4</code> are Google's public DNS, which I have configured as
+my fallback DNS. </li>
+<li>The file mentions that it's generated by <code>NetworkManager</code>, which tallies up
+with what we saw above.</li>
+</ul>
+<p>And here's the relevant section of my local <code>nsswitch.conf</code> (used by <code>glibc</code>):</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;"># Generated by authselect on Thu Jun 18 09:08:01 2020
+# Do not modify this file manually.
+
+--- snip ---
+
+hosts:      files mdns4_minimal [NOTFOUND=return] dns myhostname
+</span></code></pre>
+<p><code>authselect</code> is something new - looks like on my Fedora system there's one more
+layer of machinery involved in generating this file, but let's not worry about
+that for now. </p>
+<p>The interesting part is what it has to say about host resolution: it mentions
+<code>dns</code>, but also three sources of naming information that we haven't discussed
+before: <code>files</code>, <code>mdns4_minimal</code>, and <code>myhostname</code>. </p>
+<p>The <code>hosts</code> line is read in order.</p>
+<ul>
+<li>
+<p><code>files</code> means what it sounds like: it tells <code>glibc</code> to look in local files.
+For host lookup, that means <code>/etc/hosts</code>.</p>
+</li>
+<li>
+<p><code>mdns4_minimal</code> doesn't have a special meaning. The <code>man</code> page says this
+about how these names are translated into meaning:</p>
+<blockquote>
+<p>Libraries called /lib/libnss_SERVICE.so.X will provide the named SERVICE.</p>
+</blockquote>
+<p>So, <code>mdns4_minimal</code> will be implemented by a separate dynamic library called
+<code>libnss_mdns4_minimal.so.2</code> (the <code>2</code> depends on the <code>glibc</code> version; for
+<code>2.1</code> and above it's <code>2</code>). A small note here; for me these files are in
+<code>/lib64</code>, not <code>/lib</code>.</p>
+<p>So, what <em>is</em> <code>mdns4_minimal</code>? Well, it comes from the <code>nss-mdns</code> project,
+which provides <a href="https://en.wikipedia.org/wiki/Multicast_DNS#Protocol_overview">Multicast DNS</a>,
+a system used for host discover on local networks. This is what allows us to 
+resolve <code>.local</code> hostnames.</p>
+</li>
+<li>
+<p><code>dns</code> gets a shout out as explicitly allowed in the docs, but I notice the
+presence of <code>libnss_dns.so.2</code> in my <code>/lib64</code> directory. Now that I look,
+there's a <code>libnss_files.so.2</code> in there too. I guess we'll see how
+that fits together when we dig into <code>glibc</code>.</p>
+</li>
+<li>
+<p><code>myhostname</code> is a <code>systemd</code> module (<a href="https://www.freedesktop.org/software/systemd/man/libnss_myhostname.so.2.html">docs</a>)
+that will resolve the local system's hostname.</p>
+</li>
+</ul>
+<p>Something that tripped me up: <code>[NOTFOUND=return]</code>.
+It says that if <code>mdns4_minimal</code> returns <code>NOTFOUND</code>, then we can stop early and not
+bother with querying <code>dns</code> or <code>myhostname</code>. My question was: since 
+<code>mdns4_minimal</code> is only going to be able to find <code>.local</code> hosts, doesn't this
+action prevent us from moving on to use real <code>dns</code> for everything else? In fact
+<code>NOTFOUND</code> is only returned if <code>mdns4_minimal</code> both believes itself responsible for 
+looking up the name <em>and</em> then fails to do so. Otherwise,
+<code>mdns4_minimal</code> <a href="https://github.com/lathiat/nss-mdns/blob/master/src/nss.c#L130">will return</a>
+an <code>UNAVAIL</code> status, and resolution will continue.</p>
+<p>That gives us a clearer picture of what we're expecting to find <code>glibc</code>. Let's
+finally proceed.</p>
+<h2 id="what-does-glibc-do">what does <code>glibc</code> do?</h2>
+<h3 id="read-the-code">read the code</h3>
+<p>In this section, we'll take a brief look at the sources of <code>glibc</code>, but we
+won't dig through all the details.</p>
+<p><a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/posix/getaddrinfo.c;h=ed04e564f9711298fd7bb14fd53f13c8053694d2;hb=HEAD#l2147">Here's</a>
+<code>glibc</code>'s implementation of <code>getaddrinfo</code>. It's about 350 lines long, and
+you're welcome to pick through, but it delegates the real work of lookup to
+another function, <code>gaih_inet</code> (<a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/posix/getaddrinfo.c;h=ed04e564f9711298fd7bb14fd53f13c8053694d2;hb=HEAD#l327">further up</a>
+in the same file). That function's just shy of 800 lines, and we're along 
+the right lines, since references to some of the concepts we were looking 
+at above are creeping in now:</p>
+<ul>
+<li>a reference to <code>/etc/nsswitch.conf</code> in the comments</li>
+<li>calls through to functions with <code>nss</code> in the name, like <code>__nss_database_lookup2</code>
+and <code>__nss_lookup_function</code>. </li>
+</ul>
+<p>Notice that <code>__nss_lookup_function</code> takes the name of another function as an
+argument. If we take a peek <a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=nss/nsswitch.c;hb=efedd1ed3d211941fc66d14ba245be3552b2616a#l392">the sources</a> 
+for <code>__nss_lookup_function</code>, we'll see that it's responsible for dynamically
+loading in further libraries - presumably this is what links us up to the
+<code>libnss_SERVICE.so.X</code> files we saw above, eventually resolving the required
+function with <code>__libc_dlsym</code>.</p>
+<p>I don't know about you, but I find these sources a bit hard going; alongside
+the business logic of looking up the various resolver functions, there's a lot
+of housekeeping. </p>
+<p>Time for a change of tack.</p>
+<h3 id="strace-to-the-rescue"><code>strace</code> to the rescue</h3>
+<p>There is another way we can get to the bottom of what's going on inside the
+loveable but inscrutable yak that is <code>glibc</code>: <code>strace</code>. If you haven't seen
+<code>strace</code> before, then I promise you're going to love it: <code>strace</code> monitors all
+System calls from and signals to a given process. </p>
+<p>We've mentioned System Calls in passing already when talking about the role
+of <code>libc</code> in Rust - I said <code>libc</code> was used for:</p>
+<blockquote>
+<p>anything that touches the network, opens files, spawns new processes ...in 
+short - anything that requires making System Calls</p>
+</blockquote>
+<p>So what exactly is a System Call? Well it's anything that you need to ask the
+Kernel to do for you. Anything that touches the Real World.</p>
+<p>So, <code>strace</code> provides us with a straightforward way to answer the question of
+what a given program does - really <em>does</em> - without looking at the source
+code. So let's put together a simple program that will call <code>getaddrinfo</code>,
+and <code>strace</code> it.</p>
+<p>You can find the sources <a href="https://git.sr.ht/%7Ejelford/hostname-lookup/tree/master/src/main.rs">here</a>, 
+but it boils down to a call to <code>getaddrinfo</code>, then printing out the results.</p>
+<p>We can run it through <code>strace</code> with:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#bf616a;">target</span><span style="color:#c0c5ce;">=</span><span style="color:#a3be8c;">x86_64-unknown-linux-gnu
+</span><span style="color:#bf616a;">cargo</span><span style="color:#c0c5ce;"> build</span><span style="color:#bf616a;"> -q --target </span><span style="color:#c0c5ce;">${</span><span style="color:#bf616a;">target</span><span style="color:#c0c5ce;">}
+</span><span style="color:#bf616a;">strace -e</span><span style="color:#c0c5ce;"> desc,network,file</span><span style="color:#bf616a;"> -o </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">strace-</span><span style="color:#c0c5ce;">$</span><span style="color:#a3be8c;">{</span><span style="color:#bf616a;">target</span><span style="color:#a3be8c;">}.log</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#bf616a;"> -f </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">./target/</span><span style="color:#c0c5ce;">$</span><span style="color:#a3be8c;">{</span><span style="color:#bf616a;">target</span><span style="color:#a3be8c;">}/debug/dns-experiment</span><span style="color:#c0c5ce;">&quot; www.jameselford.com
+
+</span><span style="color:#65737e;"># ipv4 185.199.108.153: jelford.github.io
+# ipv4 185.199.110.153: &lt;unknown canonical addr&gt;
+# ipv4 185.199.109.153: &lt;unknown canonical addr&gt;
+# ipv4 185.199.111.153: &lt;unknown canonical addr&gt;
+</span></code></pre>
+<p>The <code>strace</code> incantation is:</p>
+<ul>
+<li><code>-e desc,network,file</code>: report any system calls relating to file descriptors,
+the network, and files.</li>
+<li><code>-o</code>: put the trace into a separate file, rather than interweaving with the
+output of the process being traced</li>
+<li><code>-f</code>: follow any process forks. </li>
+</ul>
+<p>The program's output is telling us that <code>www.jameselford.com</code> resolves to
+<code>185.199.108.153</code>, which has a canonocal name of <code>jelford.github.io</code> (so, now
+you know that this blog is hosted on <a href="https://pages.github.com/">GitHub Pages</a>).
+But we could have got that from <code>dig</code>; we came here for the <code>strace</code> output!</p>
+<p>You can see it <a href="https://git.sr.ht/%7Ejelford/hostname-lookup/blob/master/strace-x86_64-unknown-linux-gnu.log">here</a>.
+It makes for pretty dense reading, so I'll surface the interesting stuff,
+snipping out most of the calls I don't think are relevant. </p>
+<p>Let's start at the top:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 execve(&quot;./target/x86_64-unknown-linux-gnu/debug/dns-experiment&quot;, [&quot;./target/x86_64-unknown-linux-gn&quot;..., &quot;www.jameselford.com&quot;], 0x7ffd292c7e10 /* 46 vars */) = 0
+139893 access(&quot;/etc/ld.so.preload&quot;, R_OK) = -1 ENOENT (No such file or directory)
+139893 openat(AT_FDCWD, &quot;/etc/ld.so.cache&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 openat(AT_FDCWD, &quot;/lib64/libdl.so.2&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 read(3, &quot;\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0&gt;\0\1\0\0\0p\&quot;\0\0\0\0\0\0&quot;..., 832) = 832
+139893 fstat(3, {st_mode=S_IFREG|0755, st_size=36800, ...}) = 0
+139893 mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7fda8e374000
+139893 mmap(NULL, 24688, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x7fda8e36d000
+139893 mmap(0x7fda8e36f000, 8192, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x2000) = 0x7fda8e36f000
+139893 mmap(0x7fda8e371000, 4096, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x4000) = 0x7fda8e371000
+139893 mmap(0x7fda8e372000, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x4000) = 0x7fda8e372000
+139893 mmap(0x7fda8e373000, 112, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x7fda8e373000
+139893 close(3)                         = 0
+</span></code></pre>
+<p>I did mention that it was going to be dense.</p>
+<p>A note on how to read this: </p>
+<ul>
+<li>the first word is the name of the systemcall. </li>
+<li>following are all the arguments, in brackets</li>
+<li>then the return value at the end, after an <code>=</code></li>
+</ul>
+<p><code>strace</code> tries hard to convert arguments and return values into the 
+corresponding names like you'd find the in C header files, and even gives us
+the text description for errors. Helpful, right?</p>
+<p>So, what's happening in this snippet is that a shared library (<code>libdl</code> 
+in this case) is opened, read, mapped into memory (notice <code>PROT_EXEC</code> - 
+which maps the libraries into <em>executable</em> memory, which is what we need if 
+we're going to run code from them!), then closed. This is the first of many 
+shared libs that get loaded at the start of the process. The whole process is
+easy to recognize in the trace once you know what's going on, so, but I'll
+spare you the housekeeping for the rest:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/lib64/libpthread.so.0&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 openat(AT_FDCWD, &quot;/lib64/libgcc_s.so.1&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 openat(AT_FDCWD, &quot;/lib64/libc.so.6&quot;, O_RDONLY|O_CLOEXEC) = 3
+</span></code></pre>
+<p>At this point we've got the following libraries loaded:</p>
+<ul>
+<li><code>libdl</code>: will be used later for dynamically loading more shared libraries.</li>
+<li><code>libpthread</code>: threading support. </li>
+<li><code>libgcc</code>: GCC runtime support. Rust doesn't compile with GCC, but <code>glibc</code>
+does, so our executable must load <code>libgcc</code>. Even C has <em>some</em> runtime.</li>
+<li><code>libc</code>: this is <code>glibc</code>, on my system, and by now we were expecting to see it</li>
+</ul>
+<p>Let's move on. We're looking to see what <code>glibc</code> does next:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0) = 3
+139893 connect(3, {sa_family=AF_UNIX, sun_path=&quot;/var/run/nscd/socket&quot;}, 110) = -1 ENOENT (No such file or directory)
+</span></code></pre>
+<p>In this section, we're attempting to connect to <a href="https://linux.die.net/man/8/nscd"><code>nscd</code></a>,
+the &quot;Network service cache daemon&quot;. It doesn't appear to be running, and
+<code>systemctl</code> denies all knowledge too. I've got local <code>man</code> pages for <code>nscd</code>
+but there's no sign of it on my <code>$PATH</code> and a quick <code>rg</code> on a copy of the POSIX
+spec doesn't show anything up. <code>locate '*ncsd*'</code> turns up a few hits in <code>man</code>
+pages and embedded in flatpaks, but nothing in the main system. I guess this 
+isn't important anymore (just maintained in <code>glibc</code> for backwards 
+compatibility). I'd love to hear about it if you know differently.</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/etc/nsswitch.conf&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 read(3, &quot;# Generated by authselect on Thu&quot;..., 4096) = 2556
+</span></code></pre>
+<p>Okay, so this is loading <code>nsswitch.conf</code>, the first of the config files we 
+mentioned earlier. Looks like <code>glibc</code> looks at that first, to decide what 
+it'll do next. This ties up with what we're expecting; so far so good. We can 
+see the <code>read</code> call getting the familiar &quot;generated by authselect...&quot; header 
+that we saw before.</p>
+<p>Where does it go from there? As a quick reminder, <code>nsswitch.conf</code> listed:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">hosts:      files mdns4_minimal [NOTFOUND=return] dns myhostname
+</span></code></pre>
+<p>So, we're expecting it to consult the <code>files</code> source first. Back to the trace:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/etc/host.conf&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 read(3, &quot;multi on\n&quot;, 4096)      = 9
+</span></code></pre>
+<p>Not quite what we were expecting. Here's the contents of my <code>host.conf</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">j@.. ~/s/dns-experiment&gt; cat /etc/host.conf
+multi on
+</span></code></pre>
+<p><a href="https://www.man7.org/linux/man-pages/man5/host.conf.5.html"><code>man host.conf</code></a>
+tells us that this line tells the resolver value some details of how to
+interpret <code>/etc/hosts</code>. Okay. So we're still expecting to <code>openat(&quot;/etc/hosts&quot;)</code> 
+soon...</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/etc/resolv.conf&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 read(3, &quot;# Generated by NetworkManager\nna&quot;..., 4096) = 91
+</span></code></pre>
+<p>We saw earlier that this file specifies our DNS nameservers. We shouldn't need
+those yet as we haven't even gotten to <code>/etc/hosts</code> - but another look at
+<a href="https://www.man7.org/linux/man-pages/man5/resolv.conf.5.html"><code>man resolv.conf</code></a>
+reveals other options that may be relevant to the resolution process. Onwards...</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/lib64/libnss_files.so.2&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 openat(AT_FDCWD, &quot;/etc/hosts&quot;, O_RDONLY|O_CLOEXEC) = 3
+</span></code></pre>
+<p>Here we are - the <code>hosts</code> file. <code>files</code>, along with <code>dns</code>, got its own special
+mention in the <code>nsswitch.conf</code> man page, but it looks like this source is read
+using the same general mechanism as the other sources; load an appropriately
+named <code>.so</code> and hook into that. I won't drag you through the sources, but
+<code>glibc</code> does ship a module called <code>nss_files</code>, and sure enough, <a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=nss/nss_files/files-init.c;h=b36220e48022da5a80c1a800e8600592e6af41d0;hb=8cde977077b3568310c743b21a905ca9ab286724#l33">it knows</a>
+where to look for the <code>hosts</code> file.</p>
+<p>My <code>hosts</code> file is empty, so we won't find anything interesting in there. Now
+we're expecting to see our application move on to <code>mdns4_minimal</code>, and <code>dns</code>.
+It should never get to the <code>myhostname</code> since - assuming you're reading this,
+we're going ot find a DNS entry for <code>www.jameselford.com</code> from DNS.</p>
+<p>Here's <code>mdns4_minimal</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/lib64/libnss_mdns4_minimal.so.2&quot;, O_RDONLY|O_CLOEXEC) = 3
+</span></code></pre>
+<p>Nothing to see here. We're not looking for a <code>.local</code> domain, so that's just
+going to return without further ado. Next is DNS:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 openat(AT_FDCWD, &quot;/lib64/libresolv.so.2&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 openat(AT_FDCWD, &quot;/lib64/libnss_dns.so.2&quot;, O_RDONLY|O_CLOEXEC) = 3
+139893 socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK, IPPROTO_IP) = 3
+139893 setsockopt(3, SOL_IP, IP_RECVERR, [1], 4) = 0
+139893 connect(3, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr(&quot;192.168.1.2&quot;)}, 16) = 0
+139893 poll([{fd=3, events=POLLOUT}], 1, 0) = 1 ([{fd=3, revents=POLLOUT}])
+139893 sendto(3, &quot;\271\253\1\0\0\1\0\0\0\0\0\0\3www\vjameselford\3com&quot;..., 37, MSG_NOSIGNAL, NULL, 0) = 37
+139893 poll([{fd=3, events=POLLIN}], 1, 5000) = 1 ([{fd=3, revents=POLLIN}])
+...
+139893 recvfrom(3, &quot;\271\253\201\200\0\1\0\5\0\0\0\0\3www\vjameselford\3com&quot;..., 1024, 0, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr(&quot;192.168.1.2&quot;)}, [28-&gt;16]) = 132
+...
+139893 openat(AT_FDCWD, &quot;/etc/gai.conf&quot;, O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+</span></code></pre>
+<p>That's more interesting! <code>libresolve</code> is also part of the wider <code>glibc</code> package 
+(description <a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=resolv/README;h=514e9bb617e710f16126c1474561965a2b35653d;hb=8cde977077b3568310c743b21a905ca9ab286724">here</a>).
+We can use <a href="https://www.man7.org/linux/man-pages/man1/ldd.1.html"><code>ldd</code></a> to see
+that <code>lib_resolve</code> is brought in as a dependency of <code>libnss_dns</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">j@.. ~/s/dns-experiment&gt; ldd /lib64/libnss_dns.so.2 
+	linux-vdso.so.1 (0x00007ffda434b000)
+	libresolv.so.2 =&gt; /lib64/libresolv.so.2 (0x00007f50fc674000)
+	libc.so.6 =&gt; /lib64/libc.so.6 (0x00007f50fc4aa000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f50fc6b3000)
+</span></code></pre>
+<p>We can also see that, finally, we're making a DNS call:</p>
+<ul>
+<li><code>connect(... sin_addr=inet_addr(&quot;192.168.1.2&quot;)...)</code> - that's a call out to my
+DNS server (that we saw configured in <code>/etc/resolv.conf</code>).</li>
+<li><code>poll</code> is used to wait for the socket to be &quot;ready&quot; - whether that's to
+finish the business of connecting, sending data, or reading data. <code>poll</code> is
+used in asynchronous IO - which is a big topic, so I'll just draw attention
+to the <code>SOCK_NONBLOCK</code> option passed when the socket is initialized. This is 
+what configures the socket to work in non-blocking (asynchronous) mode.</li>
+<li><code>sendto</code> and <code>recvfrom</code> - these are the calls that actually send our DNS
+requests out to the world, then read the results back.</li>
+</ul>
+<p>The final attempt to read <a href="https://www.man7.org/linux/man-pages/man5/gai.conf.5.html"><code>gai.conf</code></a>
+allows some customization of the order with which results are returned from
+<code>getaddrinfo</code>. </p>
+<p>Great, we're done! Well... not quite. </p>
+<p>Before our application can print out the results we get... this...:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 socket(AF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 3
+139893 getsockname(3, {sa_family=AF_NETLINK, nl_pid=139893, nl_groups=00000000}, [12]) = 0
+
+# Params truncated
+139893 sendto(3, { {len=20, type=RTM_GETADDR, flags=NLM_F_REQUEST|NLM_F_DUMP, seq=1594996449, pid=0}, {ifa_family=AF_UNSPEC, ...} }, 20, 0, {sa_family=AF_NETLINK, nl_pid=0, nl_groups=00000000}, 12) = 20
+139893 recvmsg(3, ...) = 252     
+139893 recvmsg(3, ...) = 72      
+139893 recvmsg(3, ...) = 20
+...
+139893 socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, IPPROTO_IP) = 3
+139893 connect(3, {sa_family=AF_INET, sin_port=htons(0), sin_addr=inet_addr(&quot;185.199.108.153&quot;)}, 16) = 0
+139893 getsockname(3, {sa_family=AF_INET, sin_port=htons(39670), sin_addr=inet_addr(&quot;10.150.1.131&quot;)}, [28-&gt;16]) = 0
+139893 connect(3, {sa_family=AF_UNSPEC, sa_data=&quot;\0\0\0\0\0\0\0\0\0\0\0\0\0\0&quot;}, 16) = 0
+139893 connect(3, {sa_family=AF_INET, sin_port=htons(0), sin_addr=inet_addr(&quot;185.199.110.153&quot;)}, 16) = 0
+139893 getsockname(3, {sa_family=AF_INET, sin_port=htons(41427), sin_addr=inet_addr(&quot;10.150.1.131&quot;)}, [28-&gt;16]) = 0
+139893 connect(3, {sa_family=AF_UNSPEC, sa_data=&quot;\0\0\0\0\0\0\0\0\0\0\0\0\0\0&quot;}, 16) = 0
+139893 connect(3, {sa_family=AF_INET, sin_port=htons(0), sin_addr=inet_addr(&quot;185.199.109.153&quot;)}, 16) = 0
+139893 getsockname(3, {sa_family=AF_INET, sin_port=htons(46916), sin_addr=inet_addr(&quot;10.150.1.131&quot;)}, [28-&gt;16]) = 0
+139893 connect(3, {sa_family=AF_UNSPEC, sa_data=&quot;\0\0\0\0\0\0\0\0\0\0\0\0\0\0&quot;}, 16) = 0
+139893 connect(3, {sa_family=AF_INET, sin_port=htons(0), sin_addr=inet_addr(&quot;185.199.111.153&quot;)}, 16) = 0
+139893 getsockname(3, {sa_family=AF_INET, sin_port=htons(54403), sin_addr=inet_addr(&quot;10.150.1.131&quot;)}, [28-&gt;16]) = 0
+...
+</span></code></pre>
+<p><code>AF_NETLINK</code> is a socket family that provides socket-based communication 
+between the Kernel and Userspace (<a href="https://www.man7.org/linux/man-pages/man7/netlink.7.html">man pages</a>),
+and the <code>NETLINK_ROUTE</code> family being connected to is responsible for routing.
+The truncated <code>recvmsg</code> calls after we establish the <code>AF_NETLINK</code> connection
+contain a lot of info about my local network interfaces - interface names, IP
+addresses, that sort of thing. I've truncated them just because they don't play
+well with the blog's markdown parser. All of this happens after the DNS lookup
+has finished, <a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/posix/getaddrinfo.c;hb=8cde977077b3568310c743b21a905ca9ab286724#l2293">here</a>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#65737e;">/* Now we definitely need the interface information.  */
+</span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">(! check_pf_called)
+    </span><span style="color:#bf616a;">__check_pf </span><span style="color:#c0c5ce;">(&amp;seen_ipv4, &amp;seen_ipv6, &amp;in6ai, &amp;in6ailen);
+</span></code></pre>
+<p>Having gotten information about the various network interfaces, <code>glibc</code> goes
+ahead and &quot;<code>connects</code>&quot; to the IP addresses it got back from the host lookup
+procedure. There's no real <em>connecting</em> taking place here though; the socket is
+set up with type <code>SOCK_DGRAM</code>, which means it's <em>connectionless</em>. The source
+has this comment:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">/* We overwrite the type with SOCK_DGRAM since we do not
+   want connect() to connect to the other side.  If we
+   cannot determine the source address remember this
+   fact.  */
+</span></code></pre>
+<p>The game here seems to be to do just enough to call <code>getsockname</code>, and use the
+information it gets back to sort the final output list of <code>getaddrinfo</code>. Why 
+does it go to so much effort to sort the output list? There aren't really too 
+many hints right in the code, but let's rewind to the <code>man</code> page for 
+<code>getaddrinfo</code>, which mentions:</p>
+<blockquote>
+<p>Normally, the application should try using the addresses in the order in which they are returned.
+The sorting function used within getaddrinfo() is defined in RFC 3484</p>
+</blockquote>
+<p><a href="https://www.ietf.org/rfc/rfc3484.txt">Here's</a> that RFC, which I don't intend
+to get into, but I will note that it covers sorting both on <em>destination</em>
+address (i.e. the host we intend to connect <em>to</em>), and the <em>source</em> address
+(the interface that we connect <em>from</em>). I don't see that <em>source</em> address is
+included in the return value of <code>getaddrinfo</code>, but it looks like it <em>is</em> used
+as part of determining the order of results. </p>
+<p>Okay, <em>finally</em> we can print out the results that we saw at the top of the 
+section - a series of<code>write</code> calls on file descriptor <code>1</code> (which is stdout):</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">139893 write(1, &quot;ipv4 185.199.108.153: jelford.gi&quot;..., 40) = 40
+139893 write(1, &quot;ipv4 185.199.110.153: &lt;unknown c&quot;..., 47) = 47
+139893 write(1, &quot;ipv4 185.199.109.153: &lt;unknown c&quot;..., 47) = 47
+139893 write(1, &quot;ipv4 185.199.111.153: &lt;unknown c&quot;..., 47) = 47
+139893 +++ exited with 0 +++
+</span></code></pre>
+<p>Phew! That was quite a journey. </p>
+<h2 id="summary-so-far">summary so far</h2>
+<p>Let's wrap up what we've seen so far:</p>
+<ul>
+<li>Rust's standard library calls out (after jumping through a few hoops of its own)
+to <code>libc</code>'s <code>getaddrinfo</code>. </li>
+<li>Assuming that <code>libc</code> is <code>glibc</code>, it then:
+<ul>
+<li>checks for <code>nscd</code>, a caching daemon that doesn't seem to exist on my host</li>
+<li>reads <code>nsswitch.conf</code> to determine what to do next. Based on that it...</li>
+<li>checks in <code>host.conf</code> and <code>resolv.conf</code> to determine how to interpret what 
+it finds when it...</li>
+<li>reads the <code>hosts</code> file (in case of statically configured naming info),</li>
+<li>tries <code>mdns4_minimal</code> (in case of <code>.local</code> domains),</li>
+<li>queries DNS (using the DNS server it found earlier in <code>resolv.conf</code>),</li>
+<li>sorts the results according RFC-3484, using information about local
+interfaces, and...</li>
+<li>finally returns a list of host lookup results</li>
+</ul>
+</li>
+</ul>
+<p>That gives us a pretty clear picture of where to look if we want to configure
+or understand how hostname lookup is working on our system:</p>
+<ul>
+<li><code>/etc/nsswitch.conf</code> is used to determine how to look up hosts (maintained by
+<code>authselect</code>)</li>
+<li><code>/etc/hosts</code> allows us to configure a static set of names</li>
+<li><code>.local</code> domains have their own special <code>mdns4</code> thing going on,</li>
+<li>and finally, <code>/etc/resolv.conf</code> lists our name servers 
+(maintained by <code>NetworkManager</code>)</li>
+</ul>
+<p>Simple. This feels like a good place to stop, so... let's just look at one more
+thing...</p>
+<h2 id="what-if-we-re-not-using-glibc">what if we're not using <code>glibc</code>?</h2>
+<p>Now... <code>getaddrinfo</code> is specified by POSIX, but the rest of the details are not.
+<code>nss</code> is a <code>glibc</code> (well... inspired by Sun) invention, so everything from that
+point on is implementation dependant.</p>
+<p>This matters when:</p>
+<ul>
+<li>We're not using <code>glibc</code> as our <code>libc</code>.
+<ul>
+<li>Other 'nixes, like BSD, come with their own <code>libc</code>'s. </li>
+<li>The normal alternative on <em>linux</em> is <code>musl</code>,  which, apart from being the
+default choice when producing static binaries in Rust, is the system-wide
+<code>libc</code> for some Linux distributions - in particular <a href="https://www.alpinelinux.org/">alpine</a>,
+a popular choice for container base images.</li>
+</ul>
+</li>
+<li>We're not even using <code>libc</code>. Go makes its syscalls directly (well, on some
+platforms - including Linux) - what about other fundamental <code>libc</code>
+functions like <code>getaddrinfo</code>?</li>
+</ul>
+<p>Let's round this out with a quick look an <code>strace</code> generated by the same Rust
+program as above, but this time targetting <code>musl</code>:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#bf616a;">target</span><span style="color:#c0c5ce;">=</span><span style="color:#a3be8c;">x86_64-unknown-linux-musl
+</span><span style="color:#bf616a;">cargo</span><span style="color:#c0c5ce;"> build</span><span style="color:#bf616a;"> -q --target </span><span style="color:#c0c5ce;">${</span><span style="color:#bf616a;">target</span><span style="color:#c0c5ce;">}
+</span><span style="color:#bf616a;">strace -e</span><span style="color:#c0c5ce;"> desc,network,file</span><span style="color:#bf616a;"> -o </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">strace-</span><span style="color:#c0c5ce;">$</span><span style="color:#a3be8c;">{</span><span style="color:#bf616a;">target</span><span style="color:#a3be8c;">}.log</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#bf616a;"> -f </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">./target/</span><span style="color:#c0c5ce;">$</span><span style="color:#a3be8c;">{</span><span style="color:#bf616a;">target</span><span style="color:#a3be8c;">}/debug/dns-experiment</span><span style="color:#c0c5ce;">&quot; www.jameselford.com
+
+</span><span style="color:#65737e;"># ipv4 185.199.110.153: jelford.github.io
+# ipv4 185.199.109.153: jelford.github.io
+# ipv4 185.199.108.153: jelford.github.io
+# ipv4 185.199.111.153: jelford.github.io
+</span></code></pre>
+<p>Right away we notice that we get different results with <code>musl</code> vs <code>glibc</code>!
+<code>musl</code> has come back with canonical names for all results, whereas <code>glibc</code>
+didn't. The ordering is also different, though we'd have to look into RFC-3484
+to know what to make of that.</p>
+<p>You can find the full log of the <code>strace</code> <a href="https://git.sr.ht/%7Ejelford/hostname-lookup/blob/master/strace-x86_64-unknown-linux-musl.log">here</a>.
+The first thing you'll notice is that it's a <em>lot</em> shorter than the 
+<code>glibc</code>-based trace; 25 lines for the <code>musl</code> binary vs. 170 for the <code>glibc</code> one.</p>
+<p>The first thing that's gone is all the shared library loading. That's about 50
+lines from the start of the <code>glibc</code> trace. The next thing to note is that we're
+not <code>strace</code>ing <em>everything</em> here - just syscalls related to file descriptors,
+network, and file operations. So, we shouldn't read too much into a line-count
+comparison.</p>
+<p>So, what does the <code>musl</code> version do? I'll summarize here, but encourage you to
+look through the trace - it's only 25 lines!</p>
+<ul>
+<li>First up, we go straight to reading the <code>hosts</code> file</li>
+<li>Nothing there, so next we'll read <code>resolv.conf</code>.</li>
+<li>We use the nameservers we just found to issue DNS requests (<code>sendto</code> calls)</li>
+<li>Get data back (<code>recvfrom</code>)</li>
+<li>... and we're done!</li>
+</ul>
+<p>No <code>nsswitch.conf</code>, no lookup of information about local interfaces,
+no checking <code>host.conf</code> for what we should do with multiple results from <code>hosts</code>
+(perhaps that would get read if there was something <em>in</em> there?).</p>
+<p>Overall, it seems to just do a lot less... but there is one thing that stands
+out - whereas <code>glibc</code> only issued <em>one</em> DNS request (to my local resolver),
+<code>musl</code> goes ahead and fires off requests to <em>all three</em> configured nameservers.</p>
+<p>That's a bit of a surprise to me. I use the local resolver for blocking trackers
+and ads - what would happen if the remote nameservers returned first? Would
+<code>musl</code> happily come back with the results and effectively ignore my blocker?</p>
+<p>A whistlestop tour of the source:</p>
+<ul>
+<li><a href="https://git.musl-libc.org/cgit/musl/tree/src/network/getaddrinfo.c"><code>getaddrinfo</code></a>
+calls into...</li>
+<li><a href="https://git.musl-libc.org/cgit/musl/tree/src/network/lookup_name.c#n291"><code>__lookup_name</code></a>
+which calls into...</li>
+<li><code>name_from_dns_search</code>, and <code>name_from_dns</code> in the same file, which finally
+calls out to...</li>
+<li><a href="https://git.musl-libc.org/cgit/musl/tree/src/network/res_msend.c#n30"><code>__res_msend_rc</code></a>,
+which issues DNS requests to all the nameservers in parallel.</li>
+</ul>
+<p><em>My</em> reading of <code>name_from_dns</code> and <code>__res_msend_rc</code> is that the first reply 
+from any server will win, but to be confident in that, I'd want to test it out;
+one way would be to introduce a delay on my local resolver's responses... </p>
+<p>Something for another post perhaps.</p>
+<h2 id="just-one-more-thing">just one more thing...</h2>
+<p>Oh hey, <code>go</code> does its own thing! I mentioned before that it doesn't use <code>libc</code>
+for its system calls. But what about using <code>getaddrinfo</code>, and the whole <code>nss</code>
+thing? Well it turns out... it depends! </p>
+<p>The <a href="https://golang.org/pkg/net/#pkg-overview"><code>net</code> package documentation</a> 
+has some detail on this. I'll leave it there though, as I'm all <code>straced</code> out.</p>
+<h2 id="copyright">copyright</h2>
+<p>One final note: all the source code snippets above (that don't contain my 
+name) are taken from either:</p>
+<ul>
+<li>the Rust project's official sources, where <a href="https://github.com/rust-lang/rust/blob/master/COPYRIGHT">the original authors retain copyright</a>; or</li>
+<li>the <code>glibc</code> sources (copyright notice <a href="https://sourceware.org/git/?p=glibc.git;a=blob;f=COPYING;h=d159169d1050894d3ea3b98e1c965c4058208fe1;hb=HEAD">here</a>)</li>
+</ul>
+
+        </main>
+    </article>
+
+
+    </div>
+
+    <!-- 
+        Hey there friend! Don't mind me, I'm just trying to get some idea of whether anyone reads this stuff. 
+        Goatcounter (here: https://www.goatcounter.com/) tries to give that, and claims to do so without
+        tracking. I hope that's acceptable to you.
+    -->
+    <noscript><img src="https://jelford.goatcounter.com/count?p=/test-img"></noscript>
+    <script data-goatcounter="https://jelford.goatcounter.com/count"
+        async src="/assets/vendor/goatcounter.js"></script>
+  </body>
+</html>
