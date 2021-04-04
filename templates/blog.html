@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}  
+
+<style type="text/css">
+main {
+  margin-top: 2em;
+  border-top: 1px solid grey;
+}
+ul.post-list {
+  list-style-type: "🖉";
+}
+div p {
+  font-style: italic;
+}
+</style>
+
+
+<header>
+    <h1 class="breadcrumbs"><a href="/index.html">~jelford</a> / blog:</h1>
+    <a href="/rss.xml">feed</a>
+  </header>
+
+  <main>
+    <ul class="post-list" itemscope itemtype="http://schema.org/ItemList">
+    {% for post in section.pages %}
+      {% if post.draft %}{% continue %}{% endif %}
+      <li itemprop="itemListElement" itemscope itemtype="https://schema.org/BlogPosting">
+        <a href="{{post.permalink | safe}}">{{post.title}}</a>
+        <div class="post-excerpt">{{post.summary | safe }}</p>
+      </li>
+    {% endfor %}
+    </ul>
+  </main>
+{% endblock content %}

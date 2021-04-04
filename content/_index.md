@@ -1,7 +1,7 @@
----
-layout: default.liquid
-title: James Elford
----
++++
+layout = "default.liquid"
+title = "James Elford"
++++
 <h1 class="breadcrumbs">~jelford</h1>
 
 ## contact
@@ -20,7 +20,7 @@ Most recently, [{{most_recent_post.title}}]({{ most_recent_post.permalink }}):
 
 > {{most_recent_post.excerpt}}
 
-... the rest is [here](/blog.html)
+... the rest is [here](/blog/)
 
 ## open source
 

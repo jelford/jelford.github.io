@@ -1,0 +1,6 @@
+# The URL the site will be built for
+base_url = "https://www.jameselford.com"
+compile_sass = false
+highlight_code = true
+generate_feed = true
+feed_filename = "rss.xml"

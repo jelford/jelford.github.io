@@ -1,13 +1,13 @@
----
-title: Longevity in software engineering
-excerpt: How long should we expect themes and technologies in software engineering to last?
-published_date: "2020-06-14 15:32:36 +0000"
-layout: post.liquid
-is_draft: false
----
++++
+title = "Longevity in software engineering"
+excerpt = "How long should we expect themes and technologies in software engineering to last?"
+date = 2020-06-14T15:32:36+00:00
++++
 How long should we expect themes and technologies in software engineering to last?
 In this post, we'll look at how long individual projects "last" based on data from GitHub
 and try to draw conclusions around what that means for choosing foundational software.
+
+<!-- more -->
 
 Software comes and goes - except when it doesn't; we can all think of technologies like
 Fortran and COBOL that have been around forever, and continue to fulfil a useful purpose
@@ -93,7 +93,7 @@ order by earliest_commit_sec asc
 
 ```
 
-And [here's](lindy-tech/ProjectCommitTimingAnalysis.ipynb) the notebook
+And [here's](ProjectCommitTimingAnalysis.ipynb) the notebook
 I used to analyze the results and produce the plots below. If you want to
 follow along you'll have to pull the data out of BigQuery and point the
 notebook at your own CSV file.
@@ -137,7 +137,7 @@ Here are some plots of the distributions of project age.
 First, a straightforward plot of the distribution of project lifetimes. On the
 left is the whole dataset, and on the right are just those whose lifetimes
 exceed 10 years:
-![Graph showing the distribution plot of project lifetimes in years](lindy-tech/project_age_years_hist.svg)
+![Graph showing the distribution plot of project lifetimes in years](project_age_years_hist.svg)
 
 There are only 32 projects in the dataset with an age > 20 years. That's such a
 small number compared to the earlier samples that I'm going to exclude anything
@@ -158,13 +158,13 @@ showing project age (in years) on the x-axis and the kernel density estimate
 the y-axis. 
 
 First, the distribution of what's left after filtering:
-![Graph showing the distribution plot of project lifetimes in years, excluding those with age > 20 years](lindy-tech/project-age-simple-distribution.svg)
+![Graph showing the distribution plot of project lifetimes in years, excluding those with age > 20 years](project-age-simple-distribution.svg)
 
 Next, the same data on a log scale (filtered for only projects with age < 20 years):
-![Graph showing the distribution plot of project lifetimes in years with a logarithmic y-axis](lindy-tech/project-age-log-distribution-filtered.svg)
+![Graph showing the distribution plot of project lifetimes in years with a logarithmic y-axis](project-age-log-distribution-filtered.svg)
 
 Finally, the same data on a log-log scale:
-![Graph showing the distribution plot of project lifetimes in years with a logarithmic y-axis and logarithmic x-axis](lindy-tech/project-age-log-log-distribution-filtered.svg)
+![Graph showing the distribution plot of project lifetimes in years with a logarithmic y-axis and logarithmic x-axis](project-age-log-log-distribution-filtered.svg)
 
 A couple of observations:
 - Power-law distributions (of the type described by Taleb's expression of the 
@@ -185,7 +185,7 @@ on current lifespan in years (on the x-axis). The *nth-percentile* lines show th
 distribution of our sample data. First, let's zoom out and get the fullest 
 picture we can; we'll re-include the 32 projects with a lifespan > 20 years:
 
-![Graph showing a steep upward slope of projects' remaining life expectancy after they pass 6 years of age](lindy-tech/remaining_life_expectancy_all.svg)
+![Graph showing a steep upward slope of projects' remaining life expectancy after they pass 6 years of age](remaining_life_expectancy_all.svg)
 
 Woah there. A couple of things jump out:
 - This graph seems to imply that our hypothesis has some merit (in terms of 
@@ -225,7 +225,7 @@ must be.
 So, finally, here's a graph showing expected remaining life expectancy of a
 project, given its current age. 
 
-![Graph showing remaining life expectancy of projects up to 10 years of age](lindy-tech/remaining_life_expectancy_sub_10.svg)
+![Graph showing remaining life expectancy of projects up to 10 years of age](remaining_life_expectancy_sub_10.svg)
 
 Nothing really jumps out here; so I'll venture some more modest conclusions:
 - By our measure of project lifetime, age doesn't seem to tell us anything

@@ -1,11 +1,10 @@
----
-title: altogether too much detail about host name resolution
-published_date: "2020-07-18 17:51:27 +00:00"
-layout: post.liquid
-is_draft: false
----
++++
+title = "altogether too much detail about host name resolution"
+date = 2020-07-18T17:51:27+00:00
+is_draft = true
++++
 In this post we'll take a look under the covers at what happens we look up hosts.
-
+<!-- more -->
 If you're here, you'll have an idea that the answer is basically "DNS" - but 
 that's not the whole story. Let's make things concrete; we're going to answer 
 the question: how does the following snippet of (pseudo-)code figure out what 

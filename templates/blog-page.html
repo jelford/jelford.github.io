@@ -1,24 +1,19 @@
-<!DOCTYPE html>
-<html>
-    <head>
-    {% include "head.liquid" %}
-    </head>
-    <body>
+{% extends "base.html" %}
+{% block content %}  
     <header>
-        <h1 class="breadcrumbs"><a href="/">~jelford</a> / <a href="/blog.html">blog:</a></h1>
+        <h1 class="breadcrumbs"><a href="/">~jelford</a> / <a href="/blog/">blog:</a></h1>
     </header>
+  
     <article itemscope itemtype="http://schema.org/BlogPosting">
         <header>
         <h2 itemprop="name">{{page.title}}</h2>
-        {% if page.published_date %}
             <p class="post-meta-info">
                 Published on 
-                <time itemprop="datePublished" datetime="{{ page.published_date | date: '%Y-%m-%d' }}">{{ page.published_date | date: '%Y-%m-%d' }}</time>. 
+                <time itemprop="datePublished" datetime="{{ page.date }}">{{ page.date | date }}</time>. 
                 <a href="{{ page.permalink }}">(permalink)</a>
             </p>
-        {% endif %}
         </header>
-        {% if page.is_draft %}
+        {% if page.draft %}
             <p class="draft-notice">
                 🚧 Hey there! You seem to have stumbled on a draft post! You're welcome to have a look around,
                 but I'm still working on it, so it's likely that things are going to be rough around the
@@ -26,10 +21,8 @@
             </p>
         {% endif %}
         <main itemprop="articleBody">
-        {{ page.content }}
+        {{ page.content | safe }}
         </main>
     </article>
 
-    {% include "goatcounter_scriptlet.liquid" %}
-    </body>
-</html>
+{% endblock content %}
