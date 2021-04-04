@@ -165,14 +165,15 @@ Let's go through the changes:
    "When this thread receives a SIGINT, run handle_interrupt". Hopefully that
    one is relatively clear!
 
-So, let's run the above:
+So, let's run the above (the comments to the right are timings):
 
 ```
 $> cargo -q run
-Hello
-^CSorry we didn't get the chance to finish
-^CSorry we didn't get the chance to finish
-Goodbye
+Hello                                            #  0s
+^CSorry we didn't get the chance to finish       #  3s
+^CSorry we didn't get the chance to finish       #  5s
+^CSorry we didn't get the chance to finish       #  6s
+Goodbye                                          # 10s
 ```
 
 What we're seeing here is that we've successfully handled the interrupt: when
@@ -181,11 +182,12 @@ execution resumes. Great news, right?
 
 Well, not quite. There's one major issue we'd like to address: the user is
 trying to terminate the process, but rather than shutting down gracefully,
-as we set out to do, we're just throwing that request in the bin. We haven't
-handled it so much as supressed it. So we'd like to have a way to communicate
-the fact that an interrupt has occurred _back_ to the main thread of execution,
-wake up from our important long-running proccess (hey, sleep is important!),
-and shut down gracefully.
+as we set out to do, we're just throwing that request in the bin. We call the
+signal handler, but then the `sleep` starts up again right where it left off. 
+We haven't handled our signal so much as supressed it. So we'd like to have a
+way to communicate the fact that an interrupt has occurred _back_ to the main 
+thread of execution, wake up from our important long-running proccess (hey, 
+sleep is important!), and shut down gracefully.
 
 What we're going to see next is a brief excursion into the execution model of
 signal handlers (what really happens to our thread), and then we'll look at
@@ -199,7 +201,7 @@ Brief aside: you might have noticed that `signal`'s man page [says](https://www.
 
 If we were going to stick with raw `libc` calls, then it would make sense for 
 us to heed this warning and use `sigaction` instead. I skipped it this time 
-because the setup for it is a little more verbose - but as we're about to see,
+because the setup for it is a little more verbose - but as we're going to see,
 we can leverage a library to take care of this stuff for us (and when we take 
 a peek under the covers, we'll see that `sigaction` is exactly the call that 
 ends up being used). It doesn't make any difference to what we're talking about
@@ -349,7 +351,7 @@ what the source code has to say on the matter:
 > the specified duration, this function may invoke that system call multiple
 > times.
 
-To paraphrase: Rust is wise to this spurious wakeup behaviour, and will restart
+To paraphrase: Rust is wise to this wakeup behaviour, and will restart
 that `sleep` syscall for you. So, we're going to have to find another way to
 ensure that our application wakes up when an interrupt occurs.
 
