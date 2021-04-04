@@ -14,7 +14,7 @@
     </ul>
     <h2>blog</h2>
     {% set blog = get_section(path="blog/_index.md") %}
-    {% set most_recent_post = blog.pages | first %}
+    {% set most_recent_post = blog.pages | filter(attribute="draft", value=false) | first %}
 
     <p>Most recently, <a href="{{ most_recent_post.permalink }}">{{ most_recent_post.title }}</a>:</p>
     

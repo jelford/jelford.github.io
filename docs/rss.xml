@@ -7,7 +7,19 @@
         <generator>Zola</generator>
         <language>en</language>
         <atom:link href="https://www.jameselford.com/rss.xml" rel="self" type="application/rss+xml"/>
-        <lastBuildDate>Sat, 18 Jul 2020 17:51:27 +0000</lastBuildDate>
+        <lastBuildDate>Sun, 04 Apr 2021 00:00:00 +0000</lastBuildDate>
+        <item>
+            <title>Working with signals in rust</title>
+            <pubDate>Sun, 04 Apr 2021 00:00:00 +0000</pubDate>
+            <link>https://www.jameselford.com/blog/working-with-signals-in-rust/</link>
+            <guid>https://www.jameselford.com/blog/working-with-signals-in-rust/</guid>
+            <description>&lt;p&gt;In this post, we&#x27;ll take a look at linux signal handling in &lt;code&gt;rust&lt;&#x2F;code&gt;. Signals are
+an essential part of process lifecycle on linux, but working with them is often
+poorly understood - probably because it&#x27;s not obvious that special care is needed.
+By the end, we&#x27;ll get to an idiomatic way to receive signal information in
+application code.&lt;&#x2F;p&gt;
+</description>
+        </item>
         <item>
             <title>altogether too much detail about host name resolution</title>
             <pubDate>Sat, 18 Jul 2020 17:51:27 +0000</pubDate>
