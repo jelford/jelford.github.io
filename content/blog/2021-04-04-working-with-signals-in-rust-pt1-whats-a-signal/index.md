@@ -1,14 +1,20 @@
 +++
-title = "Working with signals in rust"
+title = "Working with signals in Rust - part 1"
 draft = true
 +++
-In this post, we'll take a look at linux signal handling in `rust`. Signals are
-an essential part of process lifecycle on linux, but working with them is often
-poorly understood - probably because it's not obvious that special care is needed.
-By the end, we'll get to an idiomatic way to receive signal information in
-application code.
+Signals are an essential part of process life-cycle on linux, but 
+working with them is often poorly understood - probably because it's not 
+obvious that special care is needed. In this first post of the series, we'll look at what a
+signal _is_ and the first challenging aspect: restrictions on signal handlers. 
+By the end of the series, we'll have self-contained, simple system for working
+with signals on linux.
 
 <!-- more -->
+
+This is a three-part series:
+- Part 1: what's a signal and restrictions on signal handlers (this post)
+- [Part 2: non-local behaviour of signals - spooky action at a distance](../2021-04-10-working-with-signals-in-rust-pt2-nonlocal-behavior) 
+- [Part 3: signal coalescence - signals as a lossy channel](../2021-04-17-working-with-signals-in-rust-pt3-signal-coalescing)
 
 # what's a signal anyway?
 
@@ -24,10 +30,10 @@ There are a few ways that processes can speak to one another on a 'nix system:
 Signals are probably the most primitive mechanism, and unlike the others, you
 don't have to opt in somehow to receiving them. In contrast to the file-likes
 (which you would have to read), or message queues (which you would have to 
-poll), or D-Bus (which you would have to register a handler on), signals are
-just sent to you: you either handle them or you don't. That makes signals a
-good fit for certain circumstances. Here are some examples of signals that you
-might have seen in the past:
+poll), or D-Bus (which is built on top of sockets and you would have to 
+register a handler on), signals are just sent to you: you either handle them 
+or you don't. That makes signals a good fit for certain circumstances. 
+Here are some examples of signals that you might have seen in the past:
 
 - `SIGSEGV`: invalid access to storage. This is typically sent to your process
   when you access memory you shouldn't (use-after-free, or plain old bad
@@ -48,7 +54,8 @@ example: `SIGSEGV` or `SIGINT` will terminate your process. `SIGKILL`, on the
 other hand, _can't_ be handled; it will always end your process. Others might
 simply be ignored.
 
-Aside on Windows: Windows [has signal support](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/signal?view=msvc-160),
+Aside on Windows: Contrary to occassoinal internet rumours, Windows 
+[has signal support](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/signal?view=msvc-160),
 but it doesn't do all the same things as signals on 'nix, like:
 
 > SIGINT is not supported for any Win32 application. When a CTRL+C interrupt
@@ -59,11 +66,11 @@ but it doesn't do all the same things as signals on 'nix, like:
 It also has its own mechanism for handling some of the things that are
 typically done with Signals on 'nix: [Structured Exception Handling](https://docs.microsoft.com/en-us/windows/win32/debug/structured-exception-handling)(SEH).
 In my opinion, Structured Exception Handling is actually a much nicer
-interface than Signals (for some of the reasons we'll see below) - and it fits
+interface than Signals (for some of the reasons we'll see in this series) - and it fits
 really well with the C++ Exceptions model that's probably most familiar to folks
-outside of the C/Go/Rust space. Unlike Signals, SEH uses language-level
+outside of the C/Go/Rust space. Unlike signals, SEH uses language-level
 features (`__try` / `__catch` blocks) - there's [an open issue](https://github.com/rust-lang/rust/issues/38963)
-around them, but I don't know much more than that so I'll stop there.
+around them in Rust, but I don't know much more than that so I'll stop there.
 
 # how can I handle signals?
 
@@ -291,99 +298,10 @@ of the `man` page which POSIX declares to be "async-signal-safe", and anything e
 is out of bounds - and in particular the relevant `pthread_mutex_` functions are
 off the menu.
 
-We'll see some techniques for dealing with this particular issue below, but
-first, some more reasons why signals are a rare joy to work with 👍 (these ones
-are less relevant to our narrowly contrived example, but you didn't really come
-here just to learn about `thread::sleep()`, right?)
-
-# so why are signals hard to work with? (part 2: non-local behaviour)
-
-The next interesting thing about signals is this (from `man 7 signal` again):
-
-> If a signal handler is invoked while a system call or library
-> function call is blocked, then either:
->
-> * the call is automatically restarted after the signal handler
->   returns; or
->
-> * the call fails with the error EINTR.
->
-> ...
-
-Let's just dwell for a second on what that means: any time we receive a signal,
-anywhere in our program (including between threads), we can have a system-call
-return early. In _some_ cases, we can arrange for those calls to be
-automatically restarted by virtue of the way we install our signal handler (this
-is one of the things you get from using `sigaction` instead of `signal` when
-to register your signal handler), but we can't catch all of them: in particular
-we can't arrange for `sleep` (or a bunch of other important calls like `recv`
-or `send` - on sockets) to automatically restart. 
-
-This behavior (of system-calls returning early with `EINTR`) can also happen
-without signal handlers:
-
-> On Linux, even in the absence of signal handlers, certain
-> blocking interfaces can fail with the error EINTR after the
-> process is stopped by one of the stop signals and then resumed
-> via SIGCONT.  This behavior is not sanctioned by POSIX.1, and
-> doesn't occur on other systems.
-
-Not _all_ system calls are subject to this behaviour (e.g. local disk I/O), but
-a good many of them are, and we have to be on our guard whenever we work with
-signals. What are the implications for our `sleep` example though?
-
-On the face of it, we might be thinking: this is actually good news! Here's a 
-line of reasoning:
-1. Our problem was that we don't have a way to wake up our `thread::sleep(...)` 
-   call from our signal handler
-2. It turns out that receiving a signal will wake up a `sleep` system call 
-   anyway
-3. Therefore the problem solves itself! And how!
-
-No dice ⛔. It turns out that this non-local behaviour that causes `sleep` not
-to sleep for its full duration is not the preferred interface of the Rust
-standard library. In `std::thread::sleep`, if you ask to sleep for 5 seconds,
-you will sleep for (at least...) 5 seconds. [Here's](https://github.com/rust-lang/rust/blob/1.51.0/library/std/src/thread/mod.rs#L762)
-what the source code has to say on the matter:
-
-> On Unix platforms, the underlying syscall may be interrupted by a
-> spurious wakeup or signal handler. To ensure the sleep occurs for at least
-> the specified duration, this function may invoke that system call multiple
-> times.
-
-To paraphrase: Rust is wise to this wakeup behaviour, and will restart
-that `sleep` syscall for you. So, we're going to have to find another way to
-ensure that our application wakes up when an interrupt occurs.
-
-There is a possible positive here though: what if we skip Rust's `sleep`
-implementation and go straight to `libc::sleep`? Actually, on the face of it
-that's not a bad solution. We would need to introduce a bit of extra 
-code to handle the case of early wake-up, and we still need to solve the
-problem of communicating back to our application code from the signal handler,
-but there's the beginning of a workable path forward in there. There's another issue
-with that, though- it's not _directly_ related to signal handling, but it can
-certainly be triggered by another signal elsewhere in your code, in another
-example of non-local behaviour around signals.
-
-[Here's `alarm()`](https://www.man7.org/linux/man-pages/man2/alarm.2.html), a
-call you can use to arrange for a signal (`SIGALRM`) to be delivered at some 
-point in the future. The idea is straightforward: you can use this to implement
-timeouts, for example. But here's the problem:
-
-> alarm() and setitimer(2) share the same timer; calls to one will
-> interfere with use of the other.
-> ...
-> sleep(3) may be implemented using SIGALRM; mixing calls to
-> alarm() and sleep(3) is a bad idea.
-
-and herein is the issue: calls elsewhere in our process can affect our `sleep`.
-In this case it's kind of coincidental that `alarm` happens to notify us via
-signals, rather than some other mechanism, but that nonetheless, it makes our
-plan more fragile. We can do better.
-
-# so why are signals hard to work with? (part 3: signal coalescing)
-
-
+We'll wrap up this post by talking about some of the techniques we can use for
+getting information out of our signal handlers and into our application code.
+The [next post](TODO) will cover another area of difficulty we encounter when
+we work with signals.
 
 # communicating with the application from a signal handler.
 
@@ -411,18 +329,15 @@ TODO: write about signalfd, which gives us a file handle from which we can read 
 TODO: write about signal-pipes as implemented in [`signal-hook`](https://github.com/vorner/signal-hook/blob/master/src/low_level/pipe.rs)
 Link [DJB's article on the topic](https://cr.yp.to/docs/selfpipe.html)
 
-# the `signal-hook` library
+## the `signal-hook` library
 
-`signal-hook` solves all this stuff. Use `Signal::forever`.
+# updating our example 
 
-# `select` for multiplexing event and timers
+# Conclusion
 
-We can get `signal_hook::low_level::pipe` to write to a `fd` and `select` on that with a timeout.
-
-If you ask me, `crossbeam::select!` provides a more general cross-thread
-coordination mechanism that should also give you sensible Windows support
-
-# conclusion
-
-* If we're happy to stick with linux-only then `signal_hook` gives us everything we want
-* We can abstract away some of the details with `crossbeam`
+We've seen that signal handlers are subject to some significant restrictions,
+and we can use the "self pipe" technique to escape their shackles. That got us
+to the point of a functional way to interrupt our programme flow - but it also
+necessitated submitting our core application logic to a new event loop, and
+gave us our first taste of the next problem with signals: non-local behavour.
+That'll be the theme of the [next post](TODO).
