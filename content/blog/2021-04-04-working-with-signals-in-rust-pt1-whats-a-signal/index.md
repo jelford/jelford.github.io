@@ -39,7 +39,7 @@ Here are some examples of signals that you might have seen in the past:
   when you access memory you shouldn't (use-after-free, or plain old bad
   pointer arithmetic). If you've programmed in C, you've probably seen this.
   In "safe" languages, with luck you can go many years without seeing one of these.
-- `SIGINT`: interractive interrupt. This is typically the result of the user
+- `SIGINT`: interactive interrupt. This is typically the result of the user
   hitting `Ctrl+C` on their keyboard. This is such a common interaction that
   friendly runtimes will often translate it into some more palatable 
   language-native form (e.g. in Python a [`KeyboardInterrupt` is raised](https://docs.python.org/3/library/exceptions.html#KeyboardInterrupt), 
@@ -54,7 +54,7 @@ example: `SIGSEGV` or `SIGINT` will terminate your process. `SIGKILL`, on the
 other hand, _can't_ be handled; it will always end your process. Others might
 simply be ignored.
 
-Aside on Windows: Contrary to occassoinal internet rumours, Windows 
+Aside on Windows: Contrary to occasional internet rumours, Windows 
 [has signal support](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/signal?view=msvc-160),
 but it doesn't do all the same things as signals on 'nix, like:
 
@@ -191,9 +191,9 @@ Well, not quite. There's one major issue we'd like to address: the user is
 trying to terminate the process, but rather than shutting down gracefully,
 as we set out to do, we're just throwing that request in the bin. We call the
 signal handler, but then the `sleep` starts up again right where it left off. 
-We haven't handled our signal so much as supressed it. So we'd like to have a
+We haven't handled our signal so much as suppressed it. So we'd like to have a
 way to communicate the fact that an interrupt has occurred _back_ to the main 
-thread of execution, wake up from our important long-running proccess (hey, 
+thread of execution, wake up from our important long-running process (hey, 
 sleep is important!), and shut down gracefully.
 
 What we're going to see next is a brief excursion into the execution model of
@@ -263,7 +263,7 @@ is here to help us out:
 >  To avoid problems with unsafe functions, there are two possible
 >       choices:
 >   1. Ensure that (a) the signal handler calls only async-signal-
->      safe functions, and (b) the signal handler itself is reentrant
+>      safe functions, and (b) the signal handler itself is re-entrant
 >      with respect to global variables in the main program.
 >
 >   2. Block signal delivery in the main program when calling
@@ -286,7 +286,7 @@ to say on the topic:
 
 ... and with good reason! If you want the details, I suggest you follow the link 
 and have a good read - basically it's to avoid Undefined Behaviour...
-nontheless, this is firmly _not_ going to be re-entrant.
+nonetheless, this is firmly _not_ going to be re-entrant.
 
 All of this is moot anyway, because of 1.(a):
 
@@ -339,5 +339,5 @@ We've seen that signal handlers are subject to some significant restrictions,
 and we can use the "self pipe" technique to escape their shackles. That got us
 to the point of a functional way to interrupt our programme flow - but it also
 necessitated submitting our core application logic to a new event loop, and
-gave us our first taste of the next problem with signals: non-local behavour.
+gave us our first taste of the next problem with signals: non-local behaviour.
 That'll be the theme of the [next post](TODO).
