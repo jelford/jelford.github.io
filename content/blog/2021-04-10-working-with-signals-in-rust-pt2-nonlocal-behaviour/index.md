@@ -14,9 +14,9 @@ non-local behaviour.
 
 
 This is a three-part series:
-- [Part 1: what's a signal and restrictions on signal handlers](../2021-04-04-working-with-signals-in-rust-pt1-whats-a-signal)
+- [Part 1: what's a signal and restrictions on signal handlers](../working-with-signals-in-rust-pt1-whats-a-signal)
 - Part 2: non-local behaviour of signals - spooky action at a distance (this post)
-- [Part 3: signal coalescence - signals as a lossy channel](../2021-04-17-working-with-signals-in-rust-pt3-signal-coalescing)
+- [Part 3: signal coalescence - signals as a lossy channel](../working-with-signals-in-rust-pt3-signal-coalescing)
 
 # so why are signals hard to work with? (part 2: non-local behaviour)
 
@@ -98,7 +98,7 @@ timeouts, for example. But here's the problem:
 > sleep(3) may be implemented using SIGALRM; mixing calls to
 > alarm() and sleep(3) is a bad idea.
 
-and herein is the issue: calls elsewhere in our process can affect our `sleep`.
+... and herein lies the issue: calls elsewhere in our process can affect our `sleep`.
 In this case it's kind of coincidental that `alarm` happens to notify us via
 signals, rather than some other mechanism, but that nonetheless, it makes our
 plan more fragile. We can do better.

@@ -13,8 +13,8 @@ with signals on linux.
 
 This is a three-part series:
 - Part 1: what's a signal and restrictions on signal handlers (this post)
-- [Part 2: non-local behaviour of signals - spooky action at a distance](../2021-04-10-working-with-signals-in-rust-pt2-nonlocal-behavior) 
-- [Part 3: signal coalescence - signals as a lossy channel](../2021-04-17-working-with-signals-in-rust-pt3-signal-coalescing)
+- [Part 2: non-local behaviour of signals - spooky action at a distance](../working-with-signals-in-rust-pt2-nonlocal-behaviour) 
+- [Part 3: signal coalescence - signals as a lossy channel](../working-with-signals-in-rust-pt3-signal-coalescing)
 
 # what's a signal anyway?
 
@@ -300,7 +300,7 @@ off the menu.
 
 We'll wrap up this post by talking about some of the techniques we can use for
 getting information out of our signal handlers and into our application code.
-The [next post](TODO) will cover another area of difficulty we encounter when
+The [next post](../working-with-signals-in-rust-pt2-nonlocal-behaviour) will cover another area of difficulty we encounter when
 we work with signals.
 
 # communicating with the application from a signal handler.
@@ -340,4 +340,4 @@ and we can use the "self pipe" technique to escape their shackles. That got us
 to the point of a functional way to interrupt our programme flow - but it also
 necessitated submitting our core application logic to a new event loop, and
 gave us our first taste of the next problem with signals: non-local behaviour.
-That'll be the theme of the [next post](TODO).
+That'll be the theme of the [next post](../working-with-signals-in-rust-pt2-nonlocal-behaviour).
