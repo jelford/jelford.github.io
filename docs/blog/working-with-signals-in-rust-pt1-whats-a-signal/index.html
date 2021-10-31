@@ -453,12 +453,15 @@ with child processes. Let's cover that before we move on.</li>
 ourselves through our <code>signalfd</code>. Here's the rub: signal masks are inherited by child processes,
 while the whole <code>signalfd</code> infrastructure is not. This is a problem; it means that child processes
 will:</p>
-<p>a. not receive signals in the normal way, if they were masked in the parent process,
-b. not handle them any other way either.</p>
+<ol>
+<li>not receive signals in the normal way, if they were masked in the parent process,</li>
+<li>not handle them any other way either.</li>
+</ol>
 <p>The child processes <em>could</em> clear their signal masks - but in practice most of us don't do that
 when we start our programmes. You could imagine letting the child processes inherit the <code>signalfd</code>,
 but it's the same issue; they would need to arrange to handle the signals themselves. This is a bit
-thorny - <a href="https://ldpreload.com/blog/signalfd-is-useless">maybe even a deal-breaker</a>.</p>
+thorny - <a href="https://ldpreload.com/blog/signalfd-is-useless">maybe even a deal-breaker</a> - and it's the
+reason why, in practice, folks still use the self-pipe trick.</p>
 <h2 id="the-signal-hook-library">the <code>signal-hook</code> library</h2>
 <p>Let's get to the point: the <a href="https://github.com/vorner/signal-hook"><code>signal-hook</code></a> library has what you need.
 It implements a couple of the things you would hope for:</p>
