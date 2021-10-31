@@ -305,10 +305,14 @@ off the menu. </p>
 <p>Just to give a taste of the sorts of things we can't do in a signal handler:</p>
 <ul>
 <li>anything involving locks, as we've seen above</li>
-<li><code>stdio</code> (so, printing to the screen - although we got away with it above)</li>
+<li><code>stdio</code> (like <code>printf</code> - although we got away with it above)</li>
 <li><code>malloc</code> (so, no allocating memory)</li>
 <li>... the list goes on.</li>
 </ul>
+<p>Knowing what you can and can't do gets even harder in a high-level language
+like rust - for example, it might not be obvious that <code>println!()</code> takes a
+lock] via a call to <a href="https://doc.rust-lang.org/std/io/fn.stdout.html">io::stdout()</a>:
+that's a deadlock if you get re-interrupted while printing!</p>
 <p>We'll spend the rest of this post by talking about some of the techniques we can use for
 getting information out of our signal handlers and into our application code.</p>
 <h1 id="communicating-with-the-application-from-a-signal-handler">communicating with the application from a signal handler.</h1>
@@ -536,9 +540,9 @@ makes dealing with this stuff convenient.</p>
 <p>There are two other signals-related topics that I'd like to cover:</p>
 <ul>
 <li>event coalescing, which I mentioned this briefly at the end of the section on <code>signalfd</code></li>
-<li>non-local behavior, which we haven't seen here but opens up its own fresh can of worms
-If those topics sound interesting to you, do drop me a note to remind me to make it happen.</li>
+<li>non-local behavior, which we haven't seen here but opens up its own fresh can of worms</li>
 </ul>
+<p>If those topics sound interesting to you, do drop me a note to remind me to make it happen.</p>
 
         </main>
     </article>

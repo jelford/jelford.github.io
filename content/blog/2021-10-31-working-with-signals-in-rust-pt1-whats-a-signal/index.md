@@ -294,9 +294,14 @@ off the menu.
 
 Just to give a taste of the sorts of things we can't do in a signal handler:
 - anything involving locks, as we've seen above
-- `stdio` (so, printing to the screen - although we got away with it above)
+- `stdio` (like `printf` - although we got away with it above)
 - `malloc` (so, no allocating memory)
 - ... the list goes on.
+
+Knowing what you can and can't do gets even harder in a high-level language
+like rust - for example, it might not be obvious that `println!()` takes a
+lock] via a call to [io::stdout()](https://doc.rust-lang.org/std/io/fn.stdout.html):
+that's a deadlock if you get re-interrupted while printing!
 
 We'll spend the rest of this post by talking about some of the techniques we can use for
 getting information out of our signal handlers and into our application code.
@@ -543,4 +548,5 @@ makes dealing with this stuff convenient.
 There are two other signals-related topics that I'd like to cover:
 - event coalescing, which I mentioned this briefly at the end of the section on `signalfd`
 - non-local behavior, which we haven't seen here but opens up its own fresh can of worms
+
 If those topics sound interesting to you, do drop me a note to remind me to make it happen.
