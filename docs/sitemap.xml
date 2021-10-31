@@ -15,7 +15,15 @@
         <lastmod>2020-06-14T15:32:36+00:00</lastmod>
     </url>
     <url>
-        <loc>https://www.jameselford.com/blog/working-with-signals-in-rust/</loc>
-        <lastmod>2021-04-04</lastmod>
+        <loc>https://www.jameselford.com/blog/working-with-signals-in-rust-pt1-whats-a-signal/</loc>
+        <lastmod>2021-10-31</lastmod>
+    </url>
+    <url>
+        <loc>https://www.jameselford.com/blog/working-with-signals-in-rust-pt2-nonlocal-behaviour/</loc>
+        <lastmod>2021-04-10</lastmod>
+    </url>
+    <url>
+        <loc>https://www.jameselford.com/blog/working-with-signals-in-rust-pt3-signal-coalescing/</loc>
+        <lastmod>2021-04-17</lastmod>
     </url>
 </urlset>

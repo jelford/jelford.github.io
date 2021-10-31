@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 libc = "0.2"
+signal-hook = "0.3"
+crossbeam = "0.8"
 
 [[bin]]
 name = "example"

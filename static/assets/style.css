@@ -9,6 +9,15 @@ body {
     font-size: 1.1rem;
 }
 
+h1 {
+    line-height: 1.7rem;
+}
+
+h2 {
+    font-size: 1.4rem;
+    font-style: oblique;
+}
+
 img {
 	max-width: 100%;
 }

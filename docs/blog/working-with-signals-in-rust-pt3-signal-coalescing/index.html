@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <link rel="stylesheet" type="text/css" href="/assets/style.css">
+    
+    <title>Working with signals in Rust - part 3</title>
+
+    </head>
+    <body>
+    <div>
+	      
+    <header>
+        <h1 class="breadcrumbs"><a href="/">~jelford</a> / <a href="/blog/">blog:</a></h1>
+    </header>
+  
+    <article itemscope itemtype="http://schema.org/BlogPosting">
+        <header>
+        <h1 itemprop="name">Working with signals in Rust - part 3</h2>
+            <p class="post-meta-info">
+                Published on 
+                <time itemprop="datePublished" datetime="2021-04-17">2021-04-17</time>. 
+                <a href="https:&#x2F;&#x2F;www.jameselford.com&#x2F;blog&#x2F;working-with-signals-in-rust-pt3-signal-coalescing&#x2F;">(permalink)</a>
+            </p>
+        </header>
+        
+            <p class="draft-notice">
+                🚧 Hey there! You seem to have stumbled on a draft post! You're welcome to have a look around,
+                but I'm still working on it, so it's likely that things are going to be rough around the
+                edges. That's okay with me if it's okay with you.
+            </p>
+        
+        <main itemprop="articleBody">
+        <p>Signals are an essential part of process lifecycle on linux, but 
+working with them is often poorly understood - probably because it's not 
+obvious that special care is needed. In this third post of the series, we'll
+look at a final aspect of what makes signals difficult to work with correctly:
+signal coalescence.</p>
+<span id="continue-reading"></span>
+<p>This is a three-part series:</p>
+<ul>
+<li><a href="../working-with-signals-in-rust-pt1-whats-a-signal">Part 1: what's a signal and restrictions on signal handlers</a></li>
+<li><a href="../working-with-signals-in-rust-pt2-nonlocal-behaviour">Part 2: non-local behaviour of signals - spooky action at a distance</a> </li>
+<li>Part 3: signal coalescence - signals as a lossy channel (this post)</li>
+</ul>
+<h1 id="so-why-are-signals-hard-to-work-with-part-3-signal-coalescing">so why are signals hard to work with? (part 3: signal coalescing)</h1>
+
+        </main>
+    </article>
+
+
+    </div>
+
+    <!-- 
+        Hey there friend! Don't mind me, I'm just trying to get some idea of whether anyone reads this stuff. 
+        Goatcounter (here: https://www.goatcounter.com/) tries to give that, and claims to do so without
+        tracking. I hope that's acceptable to you.
+    -->
+    <noscript><img src="https://jelford.goatcounter.com/count?p=/test-img"></noscript>
+    <script data-goatcounter="https://jelford.goatcounter.com/count"
+        async src="/assets/vendor/goatcounter.js"></script>
+  </body>
+</html>

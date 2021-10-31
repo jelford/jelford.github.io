@@ -1,23 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
     <channel>
-        <title></title>
+      <title></title>
         <link>https://www.jameselford.com</link>
         <description></description>
         <generator>Zola</generator>
         <language>en</language>
         <atom:link href="https://www.jameselford.com/rss.xml" rel="self" type="application/rss+xml"/>
-        <lastBuildDate>Sun, 04 Apr 2021 00:00:00 +0000</lastBuildDate>
+        <lastBuildDate>Sun, 31 Oct 2021 00:00:00 +0000</lastBuildDate>
         <item>
-            <title>Working with signals in rust</title>
-            <pubDate>Sun, 04 Apr 2021 00:00:00 +0000</pubDate>
-            <link>https://www.jameselford.com/blog/working-with-signals-in-rust/</link>
-            <guid>https://www.jameselford.com/blog/working-with-signals-in-rust/</guid>
-            <description>&lt;p&gt;In this post, we&#x27;ll take a look at linux signal handling in &lt;code&gt;rust&lt;&#x2F;code&gt;. Signals are
-an essential part of process lifecycle on linux, but working with them is often
-poorly understood - probably because it&#x27;s not obvious that special care is needed.
-By the end, we&#x27;ll get to an idiomatic way to receive signal information in
-application code.&lt;&#x2F;p&gt;
+            <title>Working with signals in Rust - some things that signal handlers can&#x27;t handle</title>
+            <pubDate>Sun, 31 Oct 2021 00:00:00 +0000</pubDate>
+            <link>https://www.jameselford.com/blog/working-with-signals-in-rust-pt1-whats-a-signal/</link>
+            <guid>https://www.jameselford.com/blog/working-with-signals-in-rust-pt1-whats-a-signal/</guid>
+            <description>&lt;p&gt;Signals are an essential part of process life-cycle on linux, but 
+working with them is ... fraught - probably because it&#x27;s not 
+obvious that special care is needed. In this post, we&#x27;ll look at what a
+signal &lt;em&gt;is&lt;&#x2F;em&gt; and just one of the challenging aspects: restrictions on signal handlers.&lt;&#x2F;p&gt;
+</description>
+        </item>
+        <item>
+            <title>Working with signals in Rust - part 3</title>
+            <pubDate>Sat, 17 Apr 2021 00:00:00 +0000</pubDate>
+            <link>https://www.jameselford.com/blog/working-with-signals-in-rust-pt3-signal-coalescing/</link>
+            <guid>https://www.jameselford.com/blog/working-with-signals-in-rust-pt3-signal-coalescing/</guid>
+            <description>&lt;p&gt;Signals are an essential part of process lifecycle on linux, but 
+working with them is often poorly understood - probably because it&#x27;s not 
+obvious that special care is needed. In this third post of the series, we&#x27;ll
+look at a final aspect of what makes signals difficult to work with correctly:
+signal coalescence.&lt;&#x2F;p&gt;
+</description>
+        </item>
+        <item>
+            <title>Working with signals in Rust - part 2</title>
+            <pubDate>Sat, 10 Apr 2021 00:00:00 +0000</pubDate>
+            <link>https://www.jameselford.com/blog/working-with-signals-in-rust-pt2-nonlocal-behaviour/</link>
+            <guid>https://www.jameselford.com/blog/working-with-signals-in-rust-pt2-nonlocal-behaviour/</guid>
+            <description>&lt;p&gt;Signals are an essential part of process lifecycle on linux, but 
+working with them is often poorly understood - probably because it&#x27;s not 
+obvious that special care is needed. In this second post of the series, we&#x27;ll
+look at another aspect of what makes signals difficult to work with correctly:
+non-local behaviour.&lt;&#x2F;p&gt;
 </description>
         </item>
         <item>

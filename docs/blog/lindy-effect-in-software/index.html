@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <link rel="stylesheet" type="text/css" href="/assets/style.css">
     
+    <title>Longevity in software engineering</title>
+
     </head>
     <body>
     <div>
@@ -15,7 +17,7 @@
   
     <article itemscope itemtype="http://schema.org/BlogPosting">
         <header>
-        <h2 itemprop="name">Longevity in software engineering</h2>
+        <h1 itemprop="name">Longevity in software engineering</h2>
             <p class="post-meta-info">
                 Published on 
                 <time itemprop="datePublished" datetime="2020-06-14T15:32:36+00:00">2020-06-14</time>. 
@@ -93,8 +95,8 @@ each project:</p>
   </span><span style="color:#b48ead;">join </span><span style="color:#c0c5ce;">`</span><span style="color:#a3be8c;">bigquery-public-data.github_repos.sample_repos</span><span style="color:#c0c5ce;">` sam_rs 
     on rname = </span><span style="color:#d08770;">sam_rs</span><span style="color:#c0c5ce;">.</span><span style="color:#d08770;">repo_name
   </span><span style="color:#b48ead;">where </span><span style="color:#d08770;">sam_rs</span><span style="color:#c0c5ce;">.</span><span style="color:#d08770;">watch_count </span><span style="color:#c0c5ce;">&gt; </span><span style="color:#d08770;">3
-  </span><span style="color:#c0c5ce;">and </span><span style="color:#d08770;">committer</span><span style="color:#c0c5ce;">.</span><span style="color:#d08770;">time_sec </span><span style="color:#c0c5ce;">&gt;= </span><span style="color:#d08770;">2674800</span><span style="color:#c0c5ce;">
-)
+  </span><span style="color:#c0c5ce;">and </span><span style="color:#d08770;">committer</span><span style="color:#c0c5ce;">.</span><span style="color:#d08770;">time_sec </span><span style="color:#c0c5ce;">&gt;= </span><span style="color:#d08770;">2674800
+</span><span style="color:#c0c5ce;">)
 </span><span style="color:#b48ead;">select 
   </span><span style="color:#d08770;">cs</span><span style="color:#c0c5ce;">.</span><span style="color:#d08770;">repo_name </span><span style="color:#c0c5ce;">as project_name, 
   </span><span style="color:#96b5b4;">min</span><span style="color:#c0c5ce;">(</span><span style="color:#d08770;">cs</span><span style="color:#c0c5ce;">.</span><span style="color:#d08770;">ts</span><span style="color:#c0c5ce;">) earliest_commit_sec, 

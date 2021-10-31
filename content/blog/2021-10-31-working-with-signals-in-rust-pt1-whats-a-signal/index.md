@@ -1,20 +1,14 @@
 +++
-title = "Working with signals in Rust - part 1"
-draft = true
+title = "Working with signals in Rust - some things that signal handlers can't handle"
 +++
 Signals are an essential part of process life-cycle on linux, but 
-working with them is often poorly understood - probably because it's not 
-obvious that special care is needed. In this first post of the series, we'll look at what a
-signal _is_ and the first challenging aspect: restrictions on signal handlers. 
-By the end of the series, we'll have self-contained, simple system for working
-with signals on linux.
+working with them is ... fraught - probably because it's not 
+obvious that special care is needed. In this post, we'll look at what a
+signal _is_ and just one of the challenging aspects: restrictions on signal handlers.
 
 <!-- more -->
 
-This is a three-part series:
-- Part 1: what's a signal and restrictions on signal handlers (this post)
-- [Part 2: non-local behaviour of signals - spooky action at a distance](../working-with-signals-in-rust-pt2-nonlocal-behaviour) 
-- [Part 3: signal coalescence - signals as a lossy channel](../working-with-signals-in-rust-pt3-signal-coalescing)
+TL;DR: use [signal-hook](https://github.com/vorner/signal-hook). There's an example at the end.
 
 # what's a signal anyway?
 
@@ -248,7 +242,7 @@ That sounds relatively simple, but consider:
 
 It's that last point that's the hardest to spot the implications of. What it
 means is that anything that happens inside the signal handler must be
-"re-entrant" - which means that it must be safe to stop half way through and
+"re-entrant" - and what _that_ means is that it must be safe to stop half way through and
 have _another_ instance of itself concurrently executing. This is one of the
 requirements of thread safety (one that Rust normally allows us not to think
 about), but it's worse than that: consider that in cases like `SIGSEGV`, our 
@@ -296,48 +290,256 @@ What does it take for a function to be "async-signal-safe" anyway? Well,
 it's a pretty uncomplicated answer: there is a list of functions at the bottom
 of the `man` page which POSIX declares to be "async-signal-safe", and anything else
 is out of bounds - and in particular the relevant `pthread_mutex_` functions are
-off the menu.
+off the menu. 
 
-We'll wrap up this post by talking about some of the techniques we can use for
+Just to give a taste of the sorts of things we can't do in a signal handler:
+- anything involving locks, as we've seen above
+- `stdio` (so, printing to the screen - although we got away with it above)
+- `malloc` (so, no allocating memory)
+- ... the list goes on.
+
+We'll spend the rest of this post by talking about some of the techniques we can use for
 getting information out of our signal handlers and into our application code.
-The [next post](../working-with-signals-in-rust-pt2-nonlocal-behaviour) will cover another area of difficulty we encounter when
-we work with signals.
 
 # communicating with the application from a signal handler.
 
-So we're in danger of running into rather a bleak conclusion: 
-1. we can register a callback easily enough, but we can't then use that callback
-   to communicate anything interesting back to our main thread of execution. 
-2. the arrival of signals can cause spooky action at a distance by causing our
-   system calls to return early - but in our case, in Rust, we will carry on
-   sleeping anyway
-3. we don't always get the full detail of every signal. That's not relevant for
-   our case, so let's just leave that one for another time.
-   
 Luckily, it's safe to say that the Unix process model is not completely broken. 
-In this section we'll stay at a low level and see a couple of ways we _can_ get
-information about signals back onto our application code.
+In the rest of this article we'll look at addressing 1: we'll stay at a low level 
+and see a couple of ways we _can_ get information about signals back onto our 
+application code safely, and escape the confines of "async-signal-safe" code.
 
-There are two main things we can do
+## the self-pipe trick
+
+The careful reader of the [signal-safety](https://man7.org/linux/man-pages/man7/signal-safety.7.html)
+man page may have noticed a function that gives us something of an escape hatch: `write` is available.
+
+`write` opens up the door to exfiltrating data from our signal-handler to another thread, in a "trick"
+described in [D. J. Bernstein's article on the topic](https://cr.yp.to/docs/selfpipe.html). Let's see
+that in action; we'll drop down to C since we're going to be talking with `libc` a lot for this, and
+all Rust's `unsafe` ceremony doesn't add much here:
+
+```c
+
+static int pipefds[2] = {0};
+
+void signal_handler(int signum)
+{
+    uint8_t empty[1] = {0};
+    int write_fd = pipefds[1];
+    write(write_fd, empty, 1);                 // 3
+}
+
+void handle_signal(int read_pipe_fd)
+{
+    uint8_t buff[1] = {0};
+    read(read_pipe_fd, buff, 1);               // 4
+    printf("Received signal\n");
+}
+
+int main()
+{
+    pipe(pipefds)                              // 1
+    fcntl(pipefds[1], F_SETFD, O_NONBLOCK);
+
+    int read_fd = pipefds[0];
+
+    signal(SIGINT, signal_handler);            // 2
+
+    while(true) {
+        handle_signal(read_fd);
+    }
+}
+
+```
+
+Error handling and includes omitted for brevity; you can find a full listing [here](https://gist.github.com/jelford/80367bc790ad1a46a3aa25e413e4eaf2)
+if you'd like to download and run it yourself.
+
+So there's quite a bit to unpack here:
+1. We set up a [`pipe`](https://www.man7.org/linux/man-pages/man2/pipe.2.html), which works just
+   like a pipe in the shell: you write data in one end and read it out the other end. The contents
+   of `pipefds` is just two file descriptors, which we'll use to shimmy data from the signal-handler
+   into our main thread of execution. We set the writer up as non-blocking - we don't want any blocking
+   in the signal handler.
+2. Now we install our signal handler, same as before
+3. In the signal handler, we're allowed to use `write` to send data back to the main thread - nice.
+4. Finally, in the main thread, whenever we can read from our pipe, we know that the signal handler
+   was fired.
+
+Nice! So we're able to pull information from our signal handler into the main thread. Inside `handle_signal`,
+we're back to a normal execution context, and we don't have to worry about all that signal-safety stuff we
+talked about before. Since we're using a file descriptor on the read side, we can hook that into a normal
+event loop (based on `poll`/`select`/`epoll` or whatever). Here, we'll just do blocking reads in a loop -
+that's enough to show how it works.
 
 ## signalfd
 
-TODO: write about signalfd, which gives us a file handle from which we can read signals. Link [this article](https://ldpreload.com/blog/signalfd-is-useless)
+Wouldn't it be convenient if we didn't have to set up these pipes and marshall data back to
+the main thread ourselves? `signalfd` is exactly that. From
+[the man page](https://man7.org/linux/man-pages/man2/signalfd.2.html):
 
-## self-pipe
+> signalfd - create a file descriptor for accepting signals
 
-TODO: write about signal-pipes as implemented in [`signal-hook`](https://github.com/vorner/signal-hook/blob/master/src/low_level/pipe.rs)
-Link [DJB's article on the topic](https://cr.yp.to/docs/selfpipe.html)
+Like we were discussing before: once we have a file descriptor, we can handle 
+that using familiar tools like `select`, `poll`, and `epoll` - in our existing 
+event loops, in our normal thread contexts. Let's see how that looks - and 
+we'll stay in C since we're still speaking to `libc`:
+
+```c
+void handle_signal(int);
+
+int main()
+{
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGINT);
+
+    sigprocmask(SIG_SETMASK, &mask, NULL);                // 1
+
+    int signal_fd = signalfd(-1, &mask, SFD_NONBLOCK);    // 2
+
+    struct pollfd pollfd = {
+        .fd = signal_fd,
+        .events = POLLIN,
+    };
+
+    while (poll(&pollfd, 1, 5000) > 0)                    // 3
+    {
+        handle_signal(pollfd.fd);
+    }
+}
+
+void handle_signal(int signal_fd)
+{
+    struct signalfd_siginfo siginfo;
+    ssize_t s;
+    s = read(signal_fd, &siginfo, sizeof(siginfo));       // 4
+    if (s != sizeof(siginfo))
+    {
+        perror("read");
+        exit(1);
+    }
+
+    uint32_t signo = siginfo.ssi_signo;
+    char *signame = strsignal(signo);
+
+    printf("Received signal %d (%s)\n", signo, signame);
+}
+```
+
+Again, I've omitted all the error handling and includes for brevity; you can get a full copy
+of the code [here](https://gist.github.com/jelford/d8850f357c26ee6840290f7ad89c097b) if you'd like to run it yourself.
+Here's what's going on:
+
+1. We start by letting the runtime know that we don't want interrupt signals to run according to their normal
+   disposition. Instead, they should be blocked, and queued up for us to read synchronously.
+2. Install a `signalfd` that will be used to read the signals that we just masked...
+3. This is where the magic happens: we get notified that there's a signal for us to read - we call out to
+   `handle_signal` process it.
+4. The same info that would have been sent to us via a signal handler is available to read from our file
+   descriptor.
+
+And just as before: `handle_signal` is just _normal_ code executing in a _normal_ context. We have regained
+access to all those convenient facilities like mutexes and message queues and memory allocation that make
+life great. I've set up a little `poll` loop here for the sake of exposition, but just like in the self-pipe
+trick, we can pass our file descriptor to `select` or `epoll` or whatever event loop you've got going in your application.
+
+So, we're done, right? Well, not quite--
+1. we did say we would deal with signals in _rust_, so in the next section we'll see that.
+2. there are a couple of problems with `signalfd` that I haven't mentioned so far: most notably the interaction
+   with child processes. Let's cover that before we move on.
+
+In (1) above, we saw that we blocked the delivery of signals, since we want to handle them
+ourselves through our `signalfd`. Here's the rub: signal masks are inherited by child processes,
+while the whole `signalfd` infrastructure is not. This is a problem; it means that child processes
+will:
+
+a. not receive signals in the normal way, if they were masked in the parent process,
+b. not handle them any other way either.
+
+The child processes _could_ clear their signal masks - but in practice most of us don't do that
+when we start our programmes. You could imagine letting the child processes inherit the `signalfd`,
+but it's the same issue; they would need to arrange to handle the signals themselves. This is a bit
+thorny - [maybe even a deal-breaker](https://ldpreload.com/blog/signalfd-is-useless).
 
 ## the `signal-hook` library
 
-# updating our example 
+Let's get to the point: the [`signal-hook`](https://github.com/vorner/signal-hook) library has what you need.
+It implements a couple of the things you would hope for:
+- [An `Iterator` over incoming signals](https://docs.rs/signal-hook/0.3.10/signal_hook/iterator/index.html), which you pull from the main thread
+- Signal information is pulled out of the signal handler [via the self-pipe trick](https://docs.rs/signal-hook/0.3.10/signal_hook/low_level/pipe/index.html)
+- And you're done!
+
+And this time we really are done. `signal-hook` also provides convenient adapters 
+[for use in a tokio event loop](https://docs.rs/signal-hook-tokio/0.3.0/signal_hook_tokio/),
+or equivalently [for `async-std`](https://docs.rs/signal-hook-async-std/0.2.1/signal_hook_async_std/).
+
+Let's wrap it up with an update to the example we started with:
+
+```rust
+use signal_hook::consts::*;
+use signal_hook::iterator::Signals;
+use crossbeam::channel::{select, self, Sender, Receiver, after};
+use std::time::Duration;
+
+fn await_interrupt(interrupt_notification_channel: Sender<()>) {
+    let mut signals = Signals::new(&[                              // 1
+        SIGINT,
+    ]).unwrap();
+
+    for s in &mut signals {                                        // 2
+        interrupt_notification_channel.send(());                   // 3
+    }
+}
+
+fn main() {
+    let (interrupt_tx, interrupt_rx) = channel::unbounded();
+    std::thread::spawn(move || { await_interrupt(interrupt_tx)});
+
+    let timeout = after(Duration::from_secs(5));
+    loop {
+        select! {
+            recv(interrupt_rx) -> _ => {                           // 4
+                println!("Received interrupt notification");
+                break;
+            },
+            recv(timeout) -> _ => {                                // 5
+                println!("Finally finished the long task");
+                break;
+            }
+        }
+    }
+}
+```
+
+In this example, I'm using `crossbeam` `channels` and `select` handle
+multiplexing events (namely, timeouts vs. interrupt notifications),
+but you could do the same thing without `crossbeam` in `tokio` or `async-std`
+runtime - and `signal-handler`'s tokio adapter will let you do just that.
+Let's go through the main points:
+
+1. Installing the signal handler. This does - eventually - pretty much
+   what you'd expect from the start of the post, with a [a call through to `libc::sigaction`](https://docs.rs/signal-hook-registry/1.4.0/src/signal_hook_registry/lib.rs.html#174).
+2. Signal info is fed back to us via a self-pipe. `signal-hook` wraps
+   that interaction up in a nice `Iterator` interface so that we never
+   have to worry about.
+3. We're in a normal, non-signal-handler execution context, so we
+   can safely use a `crossbeam::channel` (or any other mechanism
+   we like) to communicate between threads.
+4. Finally, when we get an interrupt on the main thread, we can break
+   out of our loop.
+5. It's not really about signals, but it's nice to note that `crossbeam`
+   also provides a nice timeout mechanism.
+
+And that's really truly the end.
 
 # Conclusion
 
 We've seen that signal handlers are subject to some significant restrictions,
-and we can use the "self pipe" technique to escape their shackles. That got us
-to the point of a functional way to interrupt our programme flow - but it also
-necessitated submitting our core application logic to a new event loop, and
-gave us our first taste of the next problem with signals: non-local behaviour.
-That'll be the theme of the [next post](../working-with-signals-in-rust-pt2-nonlocal-behaviour).
+and we can use the "self pipe" technique to escape their shackles. `signal-hook`
+makes dealing with this stuff convenient.
+
+There are two other signals-related topics that I'd like to cover:
+- event coalescing, which I mentioned this briefly at the end of the section on `signalfd`
+- non-local behavior, which we haven't seen here but opens up its own fresh can of worms
+If those topics sound interesting to you, do drop me a note to remind me to make it happen.

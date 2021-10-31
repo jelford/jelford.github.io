@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% block head %}
+    <title>{{ page.title }}</title>
+{% endblock %}
 {% block content %}  
     <header>
         <h1 class="breadcrumbs"><a href="/">~jelford</a> / <a href="/blog/">blog:</a></h1>
@@ -6,7 +9,7 @@
   
     <article itemscope itemtype="http://schema.org/BlogPosting">
         <header>
-        <h2 itemprop="name">{{page.title}}</h2>
+        <h1 itemprop="name">{{page.title}}</h2>
             <p class="post-meta-info">
                 Published on 
                 <time itemprop="datePublished" datetime="{{ page.date }}">{{ page.date | date }}</time>. 
